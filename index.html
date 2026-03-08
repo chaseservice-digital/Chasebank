@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chase Online Banking</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='15' fill='%230066b2'/%3E%3Ctext x='50' y='68' font-size='55' font-weight='bold' text-anchor='middle' fill='white'%3EC%3C/text%3E%3C/svg%3E">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .toast { 
+      animation: slideIn 0.3s ease-out; 
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      color: white;
+      font-weight: 500;
+      z-index: 9999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    @keyframes slideIn { 
+      from { transform: translateX(100%); opacity: 0; } 
+      to { transform: translateX(0); opacity: 1; } 
+    }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .modal-overlay { background: rgba(0,0,0,0.5); }
+    input:focus { outline: none; }
+    .notification-panel { transform: translateX(100%); transition: transform 0.3s ease; }
+    .notification-panel.open { transform: translateX(0); }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="app"></div>
+  
+  <script>
+    // ============================================
+    // CONFIGURATION - CHANGE THESE VALUES
+    // ============================================
+    const CONFIG = {
+      ACCOUNT_NUMBER: '4587219634',
+      DEFAULT_NAME: 'Patrick Lormard',
+      DEFAULT_BALANCE: 1200000,
+      DEFAULT_DOB: '22/Aug/1961',
+      ADDRESS: 'Savannah, Georgia',
+      CUSTOMER_CARE_EMAIL: 'agent.chaseservice@gmail.com',
+      TRANSFER_PIN: '1234',
+      ADMIN_PASSWORD: 'admin123'
+    };
+
+    // ============================================
+    // REAL BANKS LIST
+    // ============================================
+    const BANKS = [
+      { name: 'Chase Bank', code: 'CHAS' },
+      { name: 'Bank of America', code: 'BOFA' },
+      { name: 'Wells Fargo', code: 'WF' },
+      { name: 'Citibank', code: 'CITI' },
+      { name: 'US Bank', code: 'USB' },
+      { name: 'PNC Bank', code: 'PNC' },
+      { name: 'TD Bank', code: 'TD' },
+      { name: 'Capital One', code: 'COF' },
+      { name: 'Goldman Sachs', code: 'GS' },
+      { name: 'Morgan Stanley', code: 'MS' },
+      { name: 'Charles Schwab', code: 'SCHW' },
+      { name: 'Fidelity', code: 'FID' },
+      { name: 'HSBC', code: 'HSBC' },
+      { name: 'Barclays', code: 'BARC' },
+      { name: 'Santander', code: 'SANT' }
+    ];
+
+    // ============================================
+    // LOCAL STORAGE HELPERS
+    // ============================================
+    const Storage = {
+      getLocked: () => localStorage.getItem('chase_locked') === 'true',
+      setLocked: (v) => localStorage.setItem('chase_locked', v.toString()),
+      getName: () => localStorage.getItem('chase_name') || CONFIG.DEFAULT_NAME,
+      setName: (v) => localStorage.setItem('chase_name', v),
+      getBalance: () => parseFloat(localStorage.getItem('chase_balance') || CONFIG.DEFAULT_BALANCE),
+      setBalance: (v) => localStorage.setItem('chase_balance', v.toString()),
+      getDOB: () => localStorage.getItem('chase_dob') || CONFIG.DEFAULT_DOB,
+      setDOB: (v) => localStorage.setItem('chase_dob', v),
+      getEmail: () => localStorage.getItem('chase_email') || 'patrick.lormard@email.com',
+      setEmail: (v) => localStorage.setItem('chase_email', v),
+      getPhone: () => localStorage.getItem('chase_phone') || '(912) 555-0147',
+      setPhone: (v) => localStorage.setItem('chase_phone', v),
+      getShowBalance: () => localStorage.getItem('chase_show_balance') !== 'false',
+      setShowBalance: (v) => localStorage.setItem('chase_show_balance', v.toString()),
+      getPendingTransfers: () => JSON.parse(localStorage.getItem('chase_pending_transfers') || '[]'),
+      setPendingTransfers: (v) => localStorage.setItem('chase_pending_transfers', JSON.stringify(v)),
+      getTransactionHistory: () => JSON.parse(localStorage.getItem('chase_transactions') || '[]'),
+      setTransactionHistory: (v) => localStorage.setItem('chase_transactions', JSON.stringify(v))
+    };
+
+    // Initialize storage
+    if (!localStorage.getItem('chase_locked')) Storage.setLocked(false);
+    if (!localStorage.getItem('chase_name')) Storage.setName(CONFIG.DEFAULT_NAME);
+    if (!localStorage.getItem('chase_balance')) Storage.setBalance(CONFIG.DEFAULT_BALANCE);
+    if (!localStorage.getItem('chase_dob')) Storage.setDOB(CONFIG.DEFAULT_DOB);
+    if (!localStorage.getItem('chase_pending_transfers')) Storage.setPendingTransfers([]);
+    if (!localStorage.getItem('chase_transactions')) {
+      // Initialize with default transactions
+      const defaultTransactions = [
+        { id: 1, desc: 'Year-End Distribution', date: 'Dec 20, 2024', amount: 310000, type: 'credit' },
+        { id: 2, desc: 'Bentley Continental GT', date: 'Dec 15, 2024', amount: -225000, type: 'debit' },
+        { id: 3, desc: 'Commercial Property Sale', date: 'Dec 10, 2024', amount: 450000, type: 'credit' },
+        { id: 4, desc: 'African Safari Expedition', date: 'Dec 05, 2024', amount: -55000, type: 'debit' },
+        { id: 5, desc: 'Stock Dividend Payment', date: 'Nov 28, 2024', amount: 87500, type: 'credit' },
+        { id: 6, desc: 'Luxury Yacht Maintenance', date: 'Nov 22, 2024', amount: -125000, type: 'debit' },
+        { id: 7, desc: 'Real Estate Investment', date: 'Nov 15, 2024', amount: -500000, type: 'debit' },
+        { id: 8, desc: 'Business Acquisition', date: 'Nov 10, 2024', amount: 750000, type: 'credit' }
+      ];
+      Storage.setTransactionHistory(defaultTransactions);
+    }
+
+    // ============================================
+    // NOTIFICATIONS DATA
+    // ============================================
+    let NOTIFICATIONS = JSON.parse(localStorage.getItem('chase_notifications') || '[]');
+    if (NOTIFICATIONS.length === 0) {
+      NOTIFICATIONS = [
+        { id: 1, title: 'Welcome to Chase Online', message: 'Your account is now active.', date: 'Just now', read: false, type: 'info' }
+      ];
+      localStorage.setItem('chase_notifications', JSON.stringify(NOTIFICATIONS));
+    }
+
+    // ============================================
+    // UTILITIES
+    // ============================================
+    function formatCurrency(amount) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+    }
+
+    function maskAccountNumber(num) {
+      return '****' + num.slice(-4);
+    }
+
+    function generateId() {
+      return 'TRF-' + Date.now().toString(36).toUpperCase();
+    }
+
+    function formatDate(date) {
+      const options = { month: 'short', day: 'numeric', year: 'numeric' };
+      return new Date(date).toLocaleDateString('en-US', options);
+    }
+
+    function showToast(message, type = 'info') {
+      const colors = { success: 'bg-green-600', error: 'bg-red-600', info: 'bg-blue-600', warning: 'bg-amber-600' };
+      const toast = document.createElement('div');
+      toast.className = `toast ${colors[type] || colors.info}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function addNotification(title, message, type = 'info') {
+      const newNotif = {
+        id: Date.now(),
+        title,
+        message,
+        date: 'Just now',
+        read: false,
+        type
+      };
+      NOTIFICATIONS.unshift(newNotif);
+      localStorage.setItem('chase_notifications', JSON.stringify(NOTIFICATIONS));
+    }
+
+    // ============================================
+    // ICONS (SVG)
+    // ============================================
+    const Icons = {
+      home: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+      logout: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+      user: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+      settings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+      wallet: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z"/></svg>',
+      card: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>',
+      arrowUp: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>',
+      chevronRight: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>',
+      plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+      minus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+      lock: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+      shield: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+      calendar: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+      mapPin: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+      bitcoin: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/></svg>',
+      dollar: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+      clock: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+      check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+      x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+      mail: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+      alert: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+      menu: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
+      bell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+      search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+      eye: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+      eyeOff: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+      phone: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+      key: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>',
+      building: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l8-4 8 4M8 21v-10a2 2 0 0 1 4 0v10"/></svg>'
+    };
+
+    // ============================================
+    // APP STATE
+    // ============================================
+    let currentView = 'login';
+    let sidebarOpen = false;
+    let notificationsOpen = false;
+    let searchQuery = '';
+
+    // ============================================
+    // RENDER FUNCTIONS
+    // ============================================
+    function render() {
+      const app = document.getElementById('app');
+      
+      if (Storage.getLocked() && currentView !== 'admin') {
+        renderLockedScreen(app);
+        return;
+      }
+
+      switch(currentView) {
+        case 'login': renderLogin(app); break;
+        case 'dashboard': renderDashboard(app); break;
+        case 'settings': renderSettings(app); break;
+        case 'transfer': renderTransfer(app); break;
+        case 'paypal': renderPayPal(app); break;
+        case 'bitcoin': renderBitcoin(app); break;
+        case 'cashapp': renderCashApp(app); break;
+        case 'addcard': renderAddCard(app); break;
+        case 'admin': renderAdminPortal(app); break;
+        case 'adminLogin': renderAdminLogin(app); break;
+        case 'search': renderSearch(app); break;
+        default: renderLogin(app);
+      }
+    }
+
+    function renderLogin(container) {
+      container.innerHTML = `
+        <div class="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 flex flex-col">
+          <header class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <span class="text-white font-bold text-xl">C</span>
+                </div>
+                <span class="text-blue-900 font-bold text-2xl tracking-tight">CHASE</span>
+              </div>
+              <button onclick="showContact()" class="text-sm text-gray-600 hover:text-blue-600">Contact Us</button>
+            </div>
+          </header>
+          
+          <div class="flex-1 flex items-center justify-center p-4">
+            <div class="w-full max-w-md bg-white rounded-xl shadow-2xl p-8 fade-in">
+              <h1 class="text-2xl font-semibold text-gray-900 text-center mb-2">Welcome to Chase Online</h1>
+              <p class="text-center text-gray-500 text-sm mb-6">Sign in to access your accounts</p>
+              
+              <form onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                  <input type="text" id="username" placeholder="Enter username" 
+                    class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all" required>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <input type="password" id="password" placeholder="Enter password" 
+                    class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all" required>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-blue-600">
+                    <span class="text-gray-600">Remember me</span>
+                  </label>
+                  <button type="button" onclick="showForgot()" class="text-blue-600 hover:text-blue-700 font-medium">Forgot password?</button>
+                </div>
+                <button type="submit" class="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg rounded-lg transition-all transform hover:scale-[1.02]">
+                  Sign In
+                </button>
+              </form>
+              
+              <div class="mt-6 pt-6 border-t border-gray-200 text-center">
+                <p class="text-sm text-gray-600">Don't have an account? 
+                  <button onclick="showEnroll()" class="text-blue-600 hover:text-blue-700 font-medium">Enroll now</button>
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <footer class="bg-blue-950 text-white py-6">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+              <p class="text-sm text-blue-200">&copy; 2026 JPMorgan Chase & Co.</p>
+              <button onclick="currentView='adminLogin'; render()" class="text-sm text-blue-300 hover:text-white transition-colors">
+                Customer Care Portal
+              </button>
+            </div>
+          </footer>
+        </div>
+      `;
+    }
+
+    function renderLockedScreen(container) {
+      container.innerHTML = `
+        <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          <div class="w-full max-w-md bg-white rounded-xl shadow-2xl p-8 text-center fade-in">
+            <div class="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              ${Icons.lock.replace('width="20"', 'width="48"').replace('height="20"', 'height="48"').replace('stroke="currentColor"', 'stroke="#dc2626"')}
+            </div>
+            <h1 class="text-2xl font-bold text-red-600 mb-2">Account Access Locked</h1>
+            <p class="text-gray-600 mb-6">Your account has been temporarily locked for security reasons.</p>
+            
+            <div class="bg-red-50 rounded-lg p-4 mb-6 text-left">
+              <p class="text-sm text-red-800 mb-2 font-medium">This may be due to:</p>
+              <ul class="text-sm text-red-700 space-y-1 list-disc list-inside">
+                <li>Multiple failed login attempts</li>
+                <li>Suspicious activity detected</li>
+                <li>Security hold by customer care</li>
+                <li>Account verification required</li>
+              </ul>
+            </div>
+            
+            <div class="bg-blue-50 rounded-lg p-4 mb-6">
+              <p class="text-sm text-blue-800 mb-2">To unlock your account, contact:</p>
+              <div class="flex items-center justify-center gap-2">
+                ${Icons.mail}
+                <span class="font-semibold text-blue-900">${CONFIG.CUSTOMER_CARE_EMAIL}</span>
+              </div>
+            </div>
+            
+            <button onclick="currentView='login'; render()" class="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors">
+              Back to Login
+            </button>
+            
+            <p class="text-xs text-gray-500 mt-4">
+              Account: ${CONFIG.ACCOUNT_NUMBER} | Holder: ${Storage.getName()}
+            </p>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDashboard(container) {
+      const name = Storage.getName();
+      const balance = Storage.getBalance();
+      const dob = Storage.getDOB();
+      const firstName = name.split(' ')[0];
+      const showBalance = Storage.getShowBalance();
+      const unreadCount = NOTIFICATIONS.filter(n => !n.read).length;
+      const transactions = Storage.getTransactionHistory();
+      
+      container.innerHTML = `
+        <div class="min-h-screen bg-gray-50 flex">
+          <!-- Sidebar -->
+          <aside class="hidden lg:flex w-64 bg-white border-r border-gray-200 flex-col fixed h-full z-20">
+            <div class="p-6 border-b border-gray-200">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <span class="text-white font-bold text-lg">C</span>
+                </div>
+                <span class="text-blue-900 font-bold text-xl">CHASE</span>
+              </div>
+            </div>
+            <nav class="flex-1 p-4 space-y-1">
+              <button class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left bg-blue-50 text-blue-700 font-medium">
+                ${Icons.home}
+                <span>Accounts</span>
+              </button>
+            </nav>
+            <div class="p-4 border-t border-gray-200">
+              <button onclick="currentView='login'; render()" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-red-600 hover:bg-red-50 font-medium transition-colors">
+                ${Icons.logout}
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </aside>
+
+          <!-- Mobile Sidebar -->
+          ${sidebarOpen ? `
+            <div class="lg:hidden fixed inset-0 z-50">
+              <div class="absolute inset-0 bg-black/50" onclick="sidebarOpen=false; render()"></div>
+              <div class="absolute left-0 top-0 h-full w-64 bg-white shadow-xl">
+                <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><span class="text-white font-bold">C</span></div>
+                    <span class="text-blue-900 font-bold">CHASE</span>
+                  </div>
+                  <button onclick="sidebarOpen=false; render()">${Icons.x}</button>
+                </div>
+                <nav class="p-4 space-y-1">
+                  <button class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left bg-blue-50 text-blue-700">${Icons.home}<span>Accounts</span></button>
+                  <button onclick="currentView='login'; render()" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-red-600">${Icons.logout}<span>Sign Out</span></button>
+                </nav>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Notifications Panel -->
+          ${notificationsOpen ? renderNotificationsPanel() : ''}
+
+          <!-- Main Content -->
+          <main class="flex-1 lg:ml-64">
+            <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+              <div class="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                  <button onclick="sidebarOpen=true; render()" class="lg:hidden p-2 hover:bg-gray-100 rounded-lg">
+                    ${Icons.menu}
+                  </button>
+                  <h1 class="text-xl font-semibold text-gray-900">Good afternoon, ${firstName}</h1>
+                </div>
+                <div class="flex items-center gap-3">
+                  <!-- Search Button -->
+                  <button onclick="currentView='search'; render()" class="w-10 h-10 hover:bg-gray-100 rounded-full flex items-center justify-center transition-colors">
+                    ${Icons.search}
+                  </button>
+                  <!-- Notifications Button -->
+                  <button onclick="notificationsOpen=true; render()" class="w-10 h-10 hover:bg-gray-100 rounded-full flex items-center justify-center transition-colors relative">
+                    ${Icons.bell}
+                    ${unreadCount > 0 ? `<span class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">${unreadCount}</span>` : ''}
+                  </button>
+                  <!-- Profile Button -->
+                  <button onclick="currentView='settings'; render()" class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center hover:bg-blue-700 transition-colors">
+                    ${Icons.user.replace('stroke="currentColor"', 'stroke="white"')}
+                  </button>
+                </div>
+              </div>
+            </header>
+
+            <div class="p-4 sm:p-6 lg:p-8">
+              <!-- Balance Card -->
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <div class="lg:col-span-2 bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-xl p-6 shadow-lg">
+                  <div class="flex items-start justify-between mb-6">
+                    <div>
+                      <div class="flex items-center gap-2 mb-1">
+                        <p class="text-blue-100 text-sm">Total Available Balance</p>
+                        <button onclick="toggleBalance()" class="p-1 hover:bg-white/20 rounded transition-colors">
+                          ${showBalance ? Icons.eye.replace('stroke="currentColor"', 'stroke="white"') : Icons.eyeOff.replace('stroke="currentColor"', 'stroke="white"')}
+                        </button>
+                      </div>
+                      <h2 class="text-4xl font-bold">${showBalance ? formatCurrency(balance) : '****'}</h2>
+                    </div>
+                    <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                      ${Icons.wallet.replace('stroke="currentColor"', 'stroke="white"')}
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white/10 rounded-lg p-4">
+                      <p class="text-blue-100 text-xs mb-1">Account Number</p>
+                      <p class="font-mono text-lg">${maskAccountNumber(CONFIG.ACCOUNT_NUMBER)}</p>
+                    </div>
+                    <div class="bg-white/10 rounded-lg p-4">
+                      <p class="text-blue-100 text-xs mb-1">Routing Number</p>
+                      <p class="font-mono text-lg">021000021</p>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap gap-3">
+                    <span class="px-3 py-1 bg-white/20 rounded-full text-sm">Premium Account</span>
+                    <span class="px-3 py-1 bg-white/20 rounded-full text-sm">FDIC Insured</span>
+                  </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                  <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                  <div class="space-y-3">
+                    ${quickActionBtn('Transfer Money', 'bg-blue-100 text-blue-600', 'transfer', Icons.arrowUp)}
+                    ${quickActionBtn('Pay Bills', 'bg-green-100 text-green-600', 'paybills', Icons.card)}
+                    ${quickActionBtn('Add Card', 'bg-orange-100 text-orange-600', 'addcard', Icons.card)}
+                    ${quickActionBtn('Send via PayPal', 'bg-indigo-100 text-indigo-600', 'paypal', Icons.wallet)}
+                    ${quickActionBtn('Send via Bitcoin', 'bg-amber-100 text-amber-600', 'bitcoin', Icons.bitcoin)}
+                    ${quickActionBtn('Send via CashApp', 'bg-emerald-100 text-emerald-600', 'cashapp', Icons.dollar)}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Account Details & Transactions -->
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                  <h3 class="text-lg font-semibold text-gray-900 mb-4">Account Details</h3>
+                  <div class="space-y-3">
+                    <div class="flex justify-between py-2 border-b border-gray-100">
+                      <span class="text-gray-600">Account Holder</span>
+                      <span class="font-medium text-gray-900">${name}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-gray-100">
+                      <span class="text-gray-600">Account Number</span>
+                      <span class="font-mono font-medium text-gray-900">${maskAccountNumber(CONFIG.ACCOUNT_NUMBER)}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-gray-100">
+                      <span class="text-gray-600">Date of Birth</span>
+                      <span class="font-medium text-gray-900">${dob}</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-gray-100">
+                      <span class="text-gray-600">Address</span>
+                      <span class="font-medium text-gray-900 text-right text-sm">${CONFIG.ADDRESS}</span>
+                    </div>
+                    <div class="flex justify-between py-2">
+                      <span class="text-gray-600">Monthly Fee</span>
+                      <span class="font-medium text-green-600">Waived</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="lg:col-span-2 bg-white rounded-xl shadow-lg p-6">
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Recent Transactions</h3>
+                    <button class="text-blue-600 hover:text-blue-700 text-sm font-medium">View All</button>
+                  </div>
+                  <div class="space-y-4">
+                    ${transactions.slice(0, 5).map((t, i, arr) => transactionItem(t.desc, t.date, t.amount, t.type, i === arr.length - 1)).join('')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      `;
+    }
+
+    function renderNotificationsPanel() {
+      const unreadCount = NOTIFICATIONS.filter(n => !n.read).length;
+      return `
+        <div class="fixed inset-0 z-50">
+          <div class="absolute inset-0 bg-black/50" onclick="notificationsOpen=false; render()"></div>
+          <div class="notification-panel open absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-y-auto">
+            <div class="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <div>
+                <h2 class="text-xl font-bold text-gray-900">Notifications</h2>
+                <p class="text-sm text-gray-500">${unreadCount} unread</p>
+              </div>
+              <button onclick="notificationsOpen=false; render()" class="p-2 hover:bg-gray-100 rounded-lg">
+                ${Icons.x}
+              </button>
+            </div>
+            <div class="divide-y divide-gray-100">
+              ${NOTIFICATIONS.map(n => `
+                <div class="p-4 hover:bg-gray-50 transition-colors ${n.read ? '' : 'bg-blue-50'}" onclick="markNotificationRead(${n.id})">
+                  <div class="flex items-start gap-3">
+                    <div class="w-10 h-10 ${n.type === 'success' ? 'bg-green-100' : n.type === 'warning' ? 'bg-amber-100' : 'bg-blue-100'} rounded-full flex items-center justify-center flex-shrink-0">
+                      ${n.type === 'success' ? Icons.check.replace('stroke="currentColor"', 'stroke="#16a34a"') : n.type === 'warning' ? Icons.alert.replace('stroke="currentColor"', 'stroke="#d97706"') : Icons.bell.replace('stroke="currentColor"', 'stroke="#2563eb"')}
+                    </div>
+                    <div class="flex-1">
+                      <div class="flex items-center justify-between">
+                        <p class="font-semibold text-gray-900">${n.title}</p>
+                        ${!n.read ? '<span class="w-2 h-2 bg-blue-600 rounded-full"></span>' : ''}
+                      </div>
+                      <p class="text-sm text-gray-600 mt-1">${n.message}</p>
+                      <p class="text-xs text-gray-400 mt-2">${n.date}</p>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSearch(container) {
+      const transactions = Storage.getTransactionHistory();
+      const filteredTransactions = searchQuery 
+        ? transactions.filter(t => t.desc.toLowerCase().includes(searchQuery.toLowerCase()) || t.date.toLowerCase().includes(searchQuery.toLowerCase()))
+        : [];
+      
+      container.innerHTML = `
+        <div class="min-h-screen bg-gray-50">
+          <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div class="px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-4">
+              <button onclick="currentView='dashboard'; searchQuery=''; render()" class="p-2 hover:bg-gray-100 rounded-lg">
+                ${Icons.x}
+              </button>
+              <div class="flex-1 relative">
+                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">${Icons.search}</span>
+                <input 
+                  type="text" 
+                  id="searchInput"
+                  placeholder="Search transactions..." 
+                  value="${searchQuery}"
+                  oninput="searchQuery=this.value; render()"
+                  class="w-full h-12 pl-12 pr-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  autofocus
+                >
+              </div>
+            </div>
+          </header>
+          <div class="p-4 sm:p-6 lg:p-8">
+            ${searchQuery ? `
+              <p class="text-gray-600 mb-4">Found ${filteredTransactions.length} result${filteredTransactions.length !== 1 ? 's' : ''} for "${searchQuery}"</p>
+              ${filteredTransactions.length > 0 ? `
+                <div class="bg-white rounded-xl shadow-lg p-6 space-y-4">
+                  ${filteredTransactions.map((t, i, arr) => transactionItem(t.desc, t.date, t.amount, t.type, i === arr.length - 1)).join('')}
+                </div>
+              ` : `
+                <div class="text-center py-12">
+                  <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    ${Icons.search.replace('stroke="currentColor"', 'stroke="#9ca3af"')}
+                  </div>
+                  <p class="text-gray-500">No transactions found</p>
+                </div>
+              `}
+            ` : `
+              <div class="text-center py-12">
+                <p class="text-gray-500">Type to search transactions</p>
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    function quickActionBtn(label, iconClass, view, icon) {
+      return `
+        <button onclick="handleQuickAction('${view}')" class="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-opacity-50 rounded-lg transition-colors group">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 ${iconClass} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+              ${icon}
+            </div>
+            <span class="font-medium text-gray-700">${label}</span>
+          </div>
+          ${Icons.chevronRight}
+        </button>
+      `;
+    }
+
+    function transactionItem(desc, date, amount, type, isLast) {
+      const isCredit = type === 'credit';
+      return `
+        <div class="flex items-center justify-between py-3 ${isLast ? '' : 'border-b border-gray-100'}">
+          <div class="flex items-center gap-4">
+            <div class="w-10 h-10 ${isCredit ? 'bg-green-100' : 'bg-red-100'} rounded-lg flex items-center justify-center">
+              ${isCredit ? Icons.plus.replace('stroke="currentColor"', 'stroke="#16a34a"') : Icons.minus.replace('stroke="currentColor"', 'stroke="#dc2626"')}
+            </div>
+            <div>
+              <p class="font-medium text-gray-900">${desc}</p>
+              <p class="text-sm text-gray-500">${date}</p>
+            </div>
+          </div>
+          <span class="font-semibold ${isCredit ? 'text-green-600' : 'text-gray-900'}">
+            ${isCredit ? '+' : ''}${formatCurrency(Math.abs(amount))}
+          </span>
+        </div>
+      `;
+    }
+
+    function renderSettings(container) {
+      const name = Storage.getName();
+      const dob = Storage.getDOB();
+      const email = Storage.getEmail();
+      const phone = Storage.getPhone();
+      
+      container.innerHTML = `
+        <div class="min-h-screen bg-gray-50 flex">
+          <aside class="hidden lg:flex w-64 bg-white border-r border-gray-200 flex-col fixed h-full">
+            <div class="p-6 border-b border-gray-200">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><span class="text-white font-bold">C</span></div>
+                <span class="text-blue-900 font-bold">CHASE</span>
+              </div>
+            </div>
+            <nav class="flex-1 p-4 space-y-1">
+              <button onclick="currentView='dashboard'; render()" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-gray-700 hover:bg-gray-100">
+                ${Icons.home}<span>Accounts</span>
+              </button>
+              <button class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left bg-blue-50 text-blue-700 font-medium">
+                ${Icons.settings}<span>Settings</span>
+              </button>
+            </nav>
+          </aside>
+
+          <main class="flex-1 lg:ml-64">
+            <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+              <div class="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <h1 class="text-xl font-semibold text-gray-900">Settings</h1>
+                <button onclick="currentView='dashboard'; render()" class="text-blue-600 hover:text-blue-700 font-medium">Back</button>
+              </div>
+            </header>
+
+            <div class="p-4 sm:p-6 lg:p-8 max-w-4xl space-y-6">
+              <!-- Profile Card -->
+              <div class="bg-white rounded-xl shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Profile Information</h3>
+                <div class="flex items-center gap-6 mb-6">
+                  <div class="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center">
+                    ${Icons.user.replace('width="20"', 'width="40"').replace('height="20"', 'height="40"').replace('stroke="currentColor"', 'stroke="white"')}
+                  </div>
+                  <div>
+                    <p class="text-xl font-semibold text-gray-900">${name}</p>
+                    <p class="text-gray-500">Chase Private Client</p>
+                    <p class="text-sm text-gray-400">Account: ${maskAccountNumber(CONFIG.ACCOUNT_NUMBER)}</p>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 rounded-lg p-4">
+                  <div class="flex items-center gap-3">
+                    ${Icons.calendar.replace('stroke="currentColor"', 'stroke="#2563eb"')}
+                    <div>
+                      <p class="text-sm text-gray-500">Date of Birth</p>
+                      <p class="font-medium text-gray-900">${dob}</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    ${Icons.mapPin.replace('stroke="currentColor"', 'stroke="#2563eb"')}
+                    <div>
+                      <p class="text-sm text-gray-500">Address</p>
+                      <p class="font-medium text-gray-900">${CONFIG.ADDRESS}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Contact Info -->
+              <div class="bg-white rounded-xl shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div class="flex items-center gap-3">
+                      ${Icons.mail}
+                      <div>
+                        <p class="text-sm text-gray-500">Email</p>
+                        <p class="font-medium text-gray-900">${email}</p>
+                      </div>
+                    </div>
+                    <button onclick="changeEmail()" class="text-blue-600 hover:text-blue-700 text-sm font-medium">Change</button>
+                  </div>
+                  <div class="flex items-center justify-between py-3">
+                    <div class="flex items-center gap-3">
+                      ${Icons.phone}
+                      <div>
+                        <p class="text-sm text-gray-500">Phone</p>
+                        <p class="font-medium text-gray-900">${phone}</p>
+                      </div>
+                    </div>
+                    <button onclick="changePhone()" class="text-blue-600 hover:text-blue-700 text-sm font-medium">Change</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Security -->
+              <div class="bg-white rounded-xl shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Security</h3>
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div class="flex items-center gap-3">
+                      ${Icons.key}
+                      <div>
+                        <p class="font-medium text-gray-900">Password</p>
+                        <p class="text-sm text-gray-500">Last changed 30 days ago</p>
+                      </div>
+                    </div>
+                    <button onclick="changePassword()" class="text-blue-600 hover:text-blue-700 text-sm font-medium">Change</button>
+                  </div>
+                  <div class="flex items-center justify-between py-3">
+                    <div class="flex items-center gap-3">
+                      ${Icons.lock}
+                      <div>
+                        <p class="font-medium text-gray-900">Transfer PIN</p>
+                        <p class="text-sm text-gray-500">Required for all transfers</p>
+                      </div>
+                    </div>
+                    <button onclick="changePIN()" class="text-blue-600 hover:text-blue-700 text-sm font-medium">Change</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Preferences -->
+              <div class="bg-white rounded-xl shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Preferences</h3>
+                <div class="flex items-center justify-between py-3">
+                  <div class="flex items-center gap-3">
+                    ${Icons.eye}
+                    <div>
+                      <p class="font-medium text-gray-900">Show Balance</p>
+                      <p class="text-sm text-gray-500">Display balance on dashboard</p>
+                    </div>
+                  </div>
+                  <button onclick="toggleBalanceSetting()" class="w-12 h-6 ${Storage.getShowBalance() ? 'bg-blue-600' : 'bg-gray-300'} rounded-full relative transition-colors">
+                    <span class="absolute top-1 ${Storage.getShowBalance() ? 'left-7' : 'left-1'} w-4 h-4 bg-white rounded-full transition-all"></span>
+                  </button>
+                </div>
+              </div>
+              
+              <button onclick="currentView='login'; render()" class="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors">
+                Sign Out
+              </button>
+            </div>
+          </main>
+        </div>
+      `;
+    }
+
+    function renderTransfer(container) {
+      const balance = Storage.getBalance();
+      const showBalance = Storage.getShowBalance();
+      
+      container.innerHTML = `
+        <div class="min-h-screen bg-gray-50">
+          <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div class="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+              <h1 class="text-xl font-semibold text-gray-900">Transfer Money</h1>
+              <button onclick="currentView='dashboard'; render()" class="text-blue-600 hover:text-blue-700">Back</button>
+            </div>
+          </header>
+          <div class="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+              <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Select Bank</label>
+                <select id="bankSelect" class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                  <option value="">-- Select a Bank --</option>
+                  ${BANKS.map(b => `<option value="${b.code}">${b.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
+                <input type="text" id="accountNumber" placeholder="Enter recipient account number" 
+                  class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+              </div>
+              <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Account Holder Name</label>
+                <input type="text" id="accountName" placeholder="Enter account holder name" 
+                  class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+              </div>
+              <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Amount</label>
+                <div class="relative">
+                  <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  <input type="number" id="amount" placeholder="0.00" 
+                    class="w-full h-12 pl-8 pr-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Available: ${showBalance ? formatCurrency(balance) : '****'}</p>
+              </div>
+              <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Note (Optional)</label>
+                <input type="text" id="note" placeholder="Add a note" 
+                  class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+              </div>
+              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+                ${Icons.clock.replace('stroke="currentColor"', 'stroke="#d97706"')}
+                <div>
+                  <p class="font-medium text-yellow-800">Processing Time</p>
+                  <p class="text-sm text-yellow-700">Transfers require customer care approval and PIN verification.</p>
+                </div>
+              </div>
+              <div class="flex gap-4">
+                <button onclick="currentView='dashboard'; render()" class="flex-1 h-12 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+                <button onclick="submitBankTransfer()" class="flex-1 h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors">Continue</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPayPal(container) {
+      renderPaymentForm(container, 'Send via PayPal', 'indigo', 'bg-indigo-600 hover:bg-indigo-700', 'PayPal');
+    }
+
+    function renderBitcoin(container) {
+      renderPaymentForm(container, 'Send Bitcoin', 'amber', 'bg-amber-600 hover:bg-amber-700', 'Bitcoin', true);
+    }
+
+    function renderCashApp(container) {
+      renderPaymentForm(container, 'Send via CashApp', 'emerald', 'bg-emerald-600 hover:bg-emerald-700', 'CashApp');
+    }
+
+    function renderAddCard(container) {
+      const name = Storage.getName();
+      container.innerHTML = `
+        <div class="min-h-screen bg-gray-50">
+          <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div class="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+              <h1 class="text-xl font-semibold text-gray-900">Add Debit/Credit Card</h1>
+              <button onclick="currentView='dashboard'; render()" class="text-blue-600 hover:text-blue-700">Back</button>
+            </div>
+          </header>
+          <div class="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+              <div class="flex gap-4 mb-6">
+                <button class="flex-1 p-4 rounded-xl border-2 border-orange-500 bg-orange-50 text-center">
+                  ${Icons.card.replace('stroke="currentColor"', 'stroke="#ea580c"')}
+                  <p class="font-medium text-orange-700 mt-2">Debit Card</p>
+                </button>
+                <button class="flex-1 p-4 rounded-xl border-2 border-gray-200 text-center hover:border-orange-300">
+                  ${Icons.card.replace('stroke="currentColor"', 'stroke="#9ca3af"')}
+                  <p class="font-medium text-gray-600 mt-2">Credit Card</p>
+                </button>
+              </div>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
+                  <input type="text" placeholder="0000 0000 0000 0000" maxlength="19" 
+                    class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Card Holder Name</label>
+                  <input type="text" value="${name}" 
+                    class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
+                    <input type="text" placeholder="MM/YY" maxlength="5"
+                      class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200">
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">CVV</label>
+                    <input type="password" placeholder="123" maxlength="4"
+                      class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-orange-500 focus:ring-2 focus:ring-orange-200">
+                  </div>
+                </div>
+                <div class="bg-orange-50 rounded-lg p-4 flex items-center gap-2">
+                  ${Icons.shield.replace('width="32"', 'width="20"').replace('height="32"', 'height="20"').replace('stroke="currentColor"', 'stroke="#ea580c"')}
+                  <p class="text-sm text-orange-800">Your card information is encrypted and secure</p>
+                </div>
+                <button onclick="handleAddCard()" class="w-full h-12 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors">
+                  Add Card
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPaymentForm(container, title, color, btnClass, transferType, isCrypto = false) {
+      const balance = Storage.getBalance();
+      const showBalance = Storage.getShowBalance();
+      const colors = {
+        blue: 'border-blue-500 focus:ring-blue-200',
+        indigo: 'border-indigo-500 focus:ring-indigo-200',
+        amber: 'border-amber-500 focus:ring-amber-200',
+        emerald: 'border-emerald-500 focus:ring-emerald-200'
+      };
+      
+      container.innerHTML = `
+        <div class="min-h-screen bg-gray-50">
+          <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div class="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+              <h1 class="text-xl font-semibold text-gray-900">${title}</h1>
+              <button onclick="currentView='dashboard'; render()" class="text-blue-600 hover:text-blue-700">Back</button>
+            </div>
+          </header>
+          <div class="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">${isCrypto ? 'Wallet Address' : 'Recipient Email/ID'}</label>
+                  <input type="text" id="recipient" placeholder="${isCrypto ? 'bc1q... or 1A1zP1...' : 'Enter recipient'}" 
+                    class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:${colors[color]}">
+                  ${isCrypto ? '<p class="text-xs text-gray-500 mt-1">Double-check address - transactions cannot be reversed</p>' : ''}
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                  <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                    <input type="number" id="amount" placeholder="0.00" 
+                      class="w-full h-12 pl-8 pr-4 border border-gray-300 rounded-lg focus:${colors[color]}">
+                  </div>
+                  <p class="text-sm text-gray-500 mt-1">Available: ${showBalance ? formatCurrency(balance) : '****'}</p>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Note (Optional)</label>
+                  <input type="text" id="note" placeholder="Add a note" 
+                    class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:${colors[color]}">
+                </div>
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
+                  ${Icons.clock.replace('stroke="currentColor"', 'stroke="#d97706"')}
+                  <div>
+                    <p class="font-medium text-yellow-800">Processing Time</p>
+                    <p class="text-sm text-yellow-700">Transfers require customer care approval and are typically processed within 1-2 business days.</p>
+                  </div>
+                </div>
+                <div class="flex gap-4 pt-4">
+                  <button onclick="currentView='dashboard'; render()" class="flex-1 h-12 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+                  <button onclick="submitTransfer('${transferType}')" class="flex-1 h-12 ${btnClass} text-white font-semibold rounded-lg transition-colors">Send</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAdminLogin(container) {
+      container.innerHTML = `
+        <div class="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 flex flex-col">
+          <header class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center"><span class="text-white font-bold text-xl">C</span></div>
+                <span class="text-blue-900 font-bold text-2xl">CHASE</span>
+              </div>
+              <button onclick="currentView='login'; render()" class="text-gray-600 hover:text-blue-600">Back to Login</button>
+            </div>
+          </header>
+          <div class="flex-1 flex items-center justify-center p-4">
+            <div class="w-full max-w-md bg-white rounded-xl shadow-2xl p-8 fade-in">
+              <div class="text-center mb-6">
+                <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  ${Icons.shield.replace('stroke="currentColor"', 'stroke="#2563eb"')}
+                </div>
+                <h1 class="text-2xl font-semibold text-gray-900">Customer Care Portal</h1>
+                <p class="text-gray-500 text-sm">Authorized personnel only</p>
+              </div>
+              <form onsubmit="handleAdminLogin(event)" class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input type="email" id="adminEmail" placeholder="Enter email" 
+                    class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200" required>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <input type="password" id="adminPassword" placeholder="Enter password" 
+                    class="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200" required>
+                </div>
+                <button type="submit" class="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg rounded-lg transition-colors">
+                  Access Portal
+                </button>
+              </form>
+              <div class="mt-4 p-3 bg-blue-50 rounded-lg">
+                <p class="text-xs text-blue-800 text-center">
+                  <strong>Authorized Personnel Only</strong><br>
+                  Contact administrator for access credentials
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAdminPortal(container) {
+      const name = Storage.getName();
+      const balance = Storage.getBalance();
+      const dob = Storage.getDOB();
+      const isLocked = Storage.getLocked();
+      const pendingTransfers = Storage.getPendingTransfers();
+      
+      container.innerHTML = `
+        <div class="min-h-screen bg-gray-50">
+          <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center"><span class="text-white font-bold text-xl">C</span></div>
+                <span class="text-blue-900 font-bold text-2xl">CHASE</span>
+                <span class="ml-4 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">Customer Care</span>
+              </div>
+              <button onclick="currentView='login'; render()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Logout</button>
+            </div>
+          </header>
+          
+          <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">Account Management</h1>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <!-- Lock Control -->
+              <div class="bg-white rounded-xl shadow-lg p-6 ${isLocked ? 'bg-red-50' : 'bg-green-50'}">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  ${Icons.lock} Account Access Control
+                </h3>
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between">
+                    <span class="text-gray-700">Status:</span>
+                    <span class="px-3 py-1 rounded-full text-white text-sm font-medium ${isLocked ? 'bg-red-600' : 'bg-green-600'}">
+                      ${isLocked ? 'LOCKED' : 'ACTIVE'}
+                    </span>
+                  </div>
+                  <div class="p-3 bg-white rounded-lg border border-gray-200">
+                    <p class="text-sm text-gray-600">Account Holder:</p>
+                    <p class="font-semibold text-gray-900">${name}</p>
+                    <p class="text-sm text-gray-500">Account: ${CONFIG.ACCOUNT_NUMBER}</p>
+                  </div>
+                  <button onclick="toggleLock()" 
+                    class="w-full h-12 ${isLocked ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white font-semibold rounded-lg transition-colors">
+                    ${isLocked ? 'Unlock Account' : 'Lock Account'}
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Edit Account Details -->
+              <div class="bg-white rounded-xl shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  ${Icons.user} Edit Account Details
+                </h3>
+                <div class="space-y-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
+                    <input type="text" id="editName" value="${name}" 
+                      class="w-full h-10 px-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Account Balance ($)</label>
+                    <input type="number" id="editBalance" value="${balance}" 
+                      class="w-full h-10 px-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                    <input type="text" id="editDOB" value="${dob}" placeholder="DD/Mon/YYYY"
+                      class="w-full h-10 px-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                  </div>
+                  <button onclick="saveAccountDetails()" 
+                    class="w-full h-10 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
+                    ${Icons.check} Save Changes
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Current Values -->
+              <div class="bg-white rounded-xl shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Current Values</h3>
+                <div class="space-y-3">
+                  <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <p class="text-sm text-gray-500">Account Name</p>
+                    <p class="font-semibold text-gray-900">${name}</p>
+                  </div>
+                  <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <p class="text-sm text-gray-500">Account Balance</p>
+                    <p class="font-semibold text-green-600">${formatCurrency(balance)}</p>
+                  </div>
+                  <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <p class="text-sm text-gray-500">Date of Birth</p>
+                    <p class="font-semibold text-gray-900">${dob}</p>
+                  </div>
+                  <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <p class="text-sm text-gray-500">Account Number</p>
+                    <p class="font-mono font-semibold text-gray-900">${CONFIG.ACCOUNT_NUMBER}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pending Transfers Section -->
+            <div class="mt-8">
+              <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                ${Icons.clock} Pending Transfers
+                ${pendingTransfers.length > 0 ? `<span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">${pendingTransfers.length}</span>` : ''}
+              </h2>
+              
+              ${pendingTransfers.length === 0 ? `
+                <div class="bg-white rounded-xl shadow-lg p-8 text-center">
+                  <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    ${Icons.check.replace('stroke="currentColor"', 'stroke="#9ca3af"')}
+                  </div>
+                  <p class="text-gray-500">No pending transfers</p>
+                </div>
+              ` : `
+                <div class="space-y-4">
+                  ${pendingTransfers.map((transfer, index) => `
+                    <div class="bg-white rounded-xl shadow-lg p-6">
+                      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div class="flex-1">
+                          <div class="flex items-center gap-2 mb-2">
+                            <span class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-medium">PENDING</span>
+                            <span class="text-sm text-gray-500">${transfer.id}</span>
+                          </div>
+                          <h4 class="font-semibold text-gray-900">${transfer.type} to ${transfer.recipient}</h4>
+                          <p class="text-sm text-gray-500 mt-1">
+                            ${transfer.bank ? `Bank: ${transfer.bank} | ` : ''}
+                            ${transfer.accountNumber ? `Account: ${maskAccountNumber(transfer.accountNumber)} | ` : ''}
+                            Submitted: ${transfer.date}
+                          </p>
+                          <p class="text-lg font-bold text-gray-900 mt-2">${formatCurrency(transfer.amount)}</p>
+                          ${transfer.note ? `<p class="text-sm text-gray-500 mt-1">Note: ${transfer.note}</p>` : ''}
+                        </div>
+                        <div class="flex gap-2">
+                          <button onclick="approveTransfer(${index})" 
+                            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                            ${Icons.check} Approve
+                          </button>
+                          <button onclick="rejectTransfer(${index})" 
+                            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
+                            ${Icons.x} Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+          </main>
+        </div>
+      `;
+    }
+
+    // ============================================
+    // EVENT HANDLERS
+    // ============================================
+    function handleLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      
+      if (Storage.getLocked()) {
+        showToast('Account is locked. Contact customer care.', 'error');
+        return;
+      }
+      
+      if (username && password) {
+        showToast('Welcome back, ' + Storage.getName().split(' ')[0] + '!', 'success');
+        currentView = 'dashboard';
+        render();
+      }
+    }
+
+    function handleAdminLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('adminEmail').value;
+      const password = document.getElementById('adminPassword').value;
+      
+      if (email === CONFIG.CUSTOMER_CARE_EMAIL && password === CONFIG.ADMIN_PASSWORD) {
+        showToast('Customer Care Access Granted', 'success');
+        currentView = 'admin';
+        render();
+      } else {
+        showToast('Invalid credentials', 'error');
+      }
+    }
+
+    function handleQuickAction(view) {
+      if (view === 'paybills') {
+        const pin = prompt('Enter Transfer PIN:');
+        if (pin === CONFIG.TRANSFER_PIN) {
+          createPendingTransfer('Bill Payment', 0, '', '', 'Bill Payment');
+        } else if (pin) {
+          showToast('Incorrect PIN', 'error');
+        }
+        return;
+      }
+      currentView = view;
+      render();
+    }
+
+    function handleAddCard() {
+      const pin = prompt('Enter Transfer PIN:');
+      if (pin === CONFIG.TRANSFER_PIN) {
+        createPendingTransfer('Card Addition', 0, '', '', 'Add Card');
+      } else if (pin) {
+        showToast('Incorrect PIN', 'error');
+      }
+    }
+
+    function submitTransfer(transferType) {
+      const recipient = document.getElementById('recipient').value;
+      const amount = parseFloat(document.getElementById('amount').value);
+      const note = document.getElementById('note').value;
+      
+      if (!recipient || !amount || amount <= 0) {
+        showToast('Please fill in all fields with valid values', 'error');
+        return;
+      }
+      
+      const pin = prompt('Enter Transfer PIN:');
+      if (pin === CONFIG.TRANSFER_PIN) {
+        createPendingTransfer(transferType, amount, recipient, '', note);
+      } else if (pin) {
+        showToast('Incorrect PIN', 'error');
+      }
+    }
+
+    function submitBankTransfer() {
+      const bankSelect = document.getElementById('bankSelect');
+      const bank = bankSelect.options[bankSelect.selectedIndex].text;
+      const bankCode = bankSelect.value;
+      const accountNumber = document.getElementById('accountNumber').value;
+      const accountName = document.getElementById('accountName').value;
+      const amount = parseFloat(document.getElementById('amount').value);
+      const note = document.getElementById('note').value;
+      
+      if (!bankCode || !accountNumber || !accountName || !amount || amount <= 0) {
+        showToast('Please fill in all fields with valid values', 'error');
+        return;
+      }
+      
+      const pin = prompt('Enter Transfer PIN:');
+      if (pin === CONFIG.TRANSFER_PIN) {
+        createPendingTransfer('Bank Transfer', amount, accountName, bank, note, accountNumber);
+      } else if (pin) {
+        showToast('Incorrect PIN', 'error');
+      }
+    }
+
+    function createPendingTransfer(type, amount, recipient, bank, note, accountNumber = '') {
+      const pendingTransfers = Storage.getPendingTransfers();
+      const newTransfer = {
+        id: generateId(),
+        type,
+        amount,
+        recipient,
+        bank,
+        note,
+        accountNumber,
+        date: new Date().toLocaleString(),
+        status: 'pending'
+      };
+      
+      pendingTransfers.push(newTransfer);
+      Storage.setPendingTransfers(pendingTransfers);
+      
+      showToast('Transfer submitted for approval', 'success');
+      addNotification('Transfer Pending', `Your ${type} of ${formatCurrency(amount)} is awaiting approval.`, 'info');
+      
+      currentView = 'dashboard';
+      render();
+    }
+
+    function approveTransfer(index) {
+      const pendingTransfers = Storage.getPendingTransfers();
+      const transfer = pendingTransfers[index];
+      
+      if (!transfer) return;
+      
+      // Deduct from balance
+      const currentBalance = Storage.getBalance();
+      if (currentBalance < transfer.amount) {
+        showToast('Insufficient funds', 'error');
+        return;
+      }
+      
+      const newBalance = currentBalance - transfer.amount;
+      Storage.setBalance(newBalance);
+      
+      // Add to transaction history
+      const transactions = Storage.getTransactionHistory();
+      const newTransaction = {
+        id: Date.now(),
+        desc: `${transfer.type} to ${transfer.recipient || transfer.bank || 'Recipient'}`,
+        date: formatDate(new Date()),
+        amount: -transfer.amount,
+        type: 'debit'
+      };
+      transactions.unshift(newTransaction);
+      Storage.setTransactionHistory(transactions);
+      
+      // Remove from pending
+      pendingTransfers.splice(index, 1);
+      Storage.setPendingTransfers(pendingTransfers);
+      
+      // Add notification
+      addNotification('Transfer Approved', `Your ${transfer.type} of ${formatCurrency(transfer.amount)} has been processed.`, 'success');
+      
+      showToast(`Transfer approved! ${formatCurrency(transfer.amount)} deducted from account.`, 'success');
+      render();
+    }
+
+    function rejectTransfer(index) {
+      const pendingTransfers = Storage.getPendingTransfers();
+      const transfer = pendingTransfers[index];
+      
+      if (!transfer) return;
+      
+      // Remove from pending
+      pendingTransfers.splice(index, 1);
+      Storage.setPendingTransfers(pendingTransfers);
+      
+      // Add notification
+      addNotification('Transfer Rejected', `Your ${transfer.type} of ${formatCurrency(transfer.amount)} was rejected.`, 'warning');
+      
+      showToast('Transfer rejected', 'error');
+      render();
+    }
+
+    function toggleLock() {
+      const newState = !Storage.getLocked();
+      Storage.setLocked(newState);
+      showToast(newState ? 'Account LOCKED' : 'Account UNLOCKED', newState ? 'error' : 'success');
+      render();
+    }
+
+    function saveAccountDetails() {
+      const name = document.getElementById('editName').value;
+      const balance = parseFloat(document.getElementById('editBalance').value);
+      const dob = document.getElementById('editDOB').value;
+      
+      if (name) Storage.setName(name);
+      if (!isNaN(balance)) Storage.setBalance(balance);
+      if (dob) Storage.setDOB(dob);
+      
+      showToast('Account details updated!', 'success');
+      render();
+    }
+
+    function toggleBalance() {
+      Storage.setShowBalance(!Storage.getShowBalance());
+      render();
+    }
+
+    function toggleBalanceSetting() {
+      Storage.setShowBalance(!Storage.getShowBalance());
+      render();
+    }
+
+    function changeEmail() {
+      const newEmail = prompt('Enter new email:');
+      if (newEmail) {
+        Storage.setEmail(newEmail);
+        showToast('Email updated!', 'success');
+        render();
+      }
+    }
+
+    function changePhone() {
+      const newPhone = prompt('Enter new phone number:');
+      if (newPhone) {
+        Storage.setPhone(newPhone);
+        showToast('Phone number updated!', 'success');
+        render();
+      }
+    }
+
+    function changePassword() {
+      const current = prompt('Enter current password:');
+      if (current) {
+        const newPass = prompt('Enter new password:');
+        if (newPass) {
+          showToast('Password changed successfully!', 'success');
+        }
+      }
+    }
+
+    function changePIN() {
+      const current = prompt('Enter current PIN:');
+      if (current === CONFIG.TRANSFER_PIN) {
+        const newPin = prompt('Enter new 4-digit PIN:');
+        if (newPin && newPin.length === 4) {
+          CONFIG.TRANSFER_PIN = newPin;
+          showToast('PIN changed successfully!', 'success');
+        } else {
+          showToast('PIN must be 4 digits', 'error');
+        }
+      } else if (current) {
+        showToast('Incorrect current PIN', 'error');
+      }
+    }
+
+    function markNotificationRead(id) {
+      const notif = NOTIFICATIONS.find(n => n.id === id);
+      if (notif) {
+        notif.read = true;
+        localStorage.setItem('chase_notifications', JSON.stringify(NOTIFICATIONS));
+        render();
+      }
+    }
+
+    function showContact() {
+      alert(`Chase Bank Customer Care
+
+Email: ${CONFIG.CUSTOMER_CARE_EMAIL}
+Phone: 1-800-935-9935
+
+Branch Locations:
+- Savannah Main: 2 E Bryan St, Savannah, GA
+- Midtown: 3405 Waters Ave, Savannah, GA
+- Pooler: 1010 US-80, Pooler, GA`);
+    }
+
+    function showForgot() {
+      alert(`Forgot Password
+
+Please contact customer care to reset your password:
+${CONFIG.CUSTOMER_CARE_EMAIL}`);
+    }
+
+    function showEnroll() {
+      alert(`Enroll New Account
+
+Please visit a Chase branch or contact customer care:
+${CONFIG.CUSTOMER_CARE_EMAIL}`);
+    }
+
+    // ============================================
+    // INITIALIZE
+    // ============================================
+    render();
+  </script>
+</body>
+</html>
